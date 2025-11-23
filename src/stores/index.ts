@@ -38,43 +38,6 @@ interface UserProfile {
   }
 }
 
-interface PassupShot {
-  id: number
-  round_number: number
-  user_role: 'passer' | 'blocker'
-  user_direction: 'left' | 'center' | 'right'
-  bot_direction: 'left' | 'center' | 'right'
-  success: boolean
-}
-
-interface PassupGameState {
-  status: 'open' | 'ongoing' | 'finished'
-  play_id: number | null
-  level: number
-  score_user: number
-  score_bot: number
-  current_user_role: 'passer' | 'blocker' | null
-  shots: PassupShot[]
-  result: {
-    result: 'win' | 'lose' | 'draw'
-    user_passes: number
-    bot_passes: number
-    tokens_awarded: number
-    level: number
-  } | null
-  games: number
-}
-
-interface LeaderboardEntry {
-  nickname: string
-  user_id: number
-  total_shots: number
-  total_goals: number
-  accuracy: string
-  total_games: number
-  score: string
-}
-
 // PassUp Ladder Game Types
 interface GridCell {
   id: number
@@ -154,20 +117,8 @@ export const useGlobalStore = defineStore('global', {
       tokenSum: 0,
       userProfile: null as UserProfile | null,
       transferToken: null as string | null,
-      passupGame: {
-        status: 'open',
-        play_id: null,
-        level: 1,
-        score_user: 0,
-        score_bot: 0,
-        current_user_role: null,
-        shots: [],
-        result: null,
-        games: 0
-      } satisfies PassupGameState,
-      intentionallyLeftGame: false, // Track if user manually left the game
-      leaderboard: [] as LeaderboardEntry[],
       userEnergyPercentage: 0, // User's energy level (0-100)
+      intentionallyLeftGame: false, // Track if user manually left the game
       // Ladder game state
       ladderGame: {
         grid: null,
@@ -183,8 +134,6 @@ export const useGlobalStore = defineStore('global', {
         tokenSum: false,
         avatars: false,
         userProfile: false,
-        passupGame: false,
-        leaderboard: false,
         energy: false,
         ladderGame: false
       }
@@ -539,21 +488,6 @@ export const useGlobalStore = defineStore('global', {
       const prefs = JSON.parse(localStorage.getItem('prefs') || '{}')
       return prefs.simulateNonAdmin || false
     },
-    async getPassupLeaderboard() {
-      try {
-        if (!this.apiToken) throw new Error('API token is missing');
-        this.loading.leaderboard = true
-        const data = await apiRequest('/Passup/Top', { method: 'GET' }, this.apiToken)
-        this.leaderboard = data || []
-        return data
-      } catch (e) {
-        console.error('Leaderboard error', e)
-        this.leaderboard = []
-        return []
-      } finally {
-        this.loading.leaderboard = false
-      }
-    },
     async fetchUserEnergy() {
       this.loading.energy = true
       try {
@@ -573,121 +507,6 @@ export const useGlobalStore = defineStore('global', {
         return { ok: false, message: err?.message || 'Failed to load energy data.' }
       } finally {
         this.loading.energy = false
-      }
-    },
-    // Passup Game Actions
-    async getPassupGameStatus() {
-      try {
-        if (!this.apiToken) {
-          console.error('API token is missing')
-          return { ok: false, error: 'API token is missing' }
-        }
-        this.loading.passupGame = true
-        const data = await apiRequest('/PassupV2/Index', { method: 'GET', skipTlg: true }, this.apiToken)
-
-        if (data && data.ok) {
-          this.passupGame.status = data.status
-
-          if (data.status === 'ongoing' && data.play) {
-            this.passupGame.play_id = data.play.id
-            this.passupGame.level = data.play.level
-            this.passupGame.score_user = data.play.score_user
-            this.passupGame.score_bot = data.play.score_bot
-            this.passupGame.current_user_role = data.play.current_user_role
-            this.passupGame.shots = data.shots || []
-          } else if (data.status === 'open') {
-            this.passupGame.games = data.games || 0
-          }
-        }
-        return data
-      } catch (e: any) {
-        console.error('Passup game status error', e)
-        // Return error object instead of null for better error handling
-        return { ok: false, error: e?.message || 'Failed to fetch game status' }
-      } finally {
-        this.loading.passupGame = false
-      }
-    },
-    async startPassupGame(level: number = 1) {
-      try {
-        if (!this.apiToken) throw new Error('API token is missing');
-        this.loading.passupGame = true
-        const data = await apiRequest('/PassupV2/Start', {
-          method: 'POST',
-          body: { level },
-          skipTlg: true
-        }, this.apiToken)
-
-        if (data && data.ok) {
-          this.passupGame.status = data.status
-          this.passupGame.play_id = data.play_id
-          this.passupGame.shots = data.shots || []
-          this.passupGame.level = level
-          this.passupGame.score_user = 0
-          this.passupGame.score_bot = 0
-          this.passupGame.result = null
-
-          // Game always starts with user as passer
-          this.passupGame.current_user_role = 'passer'
-
-          // If there's existing game state, update it
-          if (data.status === 'ongoing') {
-            // Fetch full status to get current role
-            await this.getPassupGameStatus()
-          }
-        }
-        return data
-      } catch (e) {
-        console.error('Start passup game error', e)
-        throw e
-      } finally {
-        this.loading.passupGame = false
-      }
-    },
-    async makePass(direction: 'left' | 'center' | 'right') {
-      try {
-        if (!this.apiToken) throw new Error('API token is missing');
-        if (!this.passupGame.play_id) throw new Error('No active game');
-
-        this.loading.passupGame = true
-        const data = await apiRequest('/PassupV2/Pass', {
-          method: 'POST',
-          body: {
-            play_id: this.passupGame.play_id,
-            pass_direction: direction
-          },
-          skipTlg: true
-        }, this.apiToken)
-
-        if (data && data.ok) {
-          // Update game state after pass
-          await this.getPassupGameStatus()
-
-          // If game is finished, store result
-          if (data.finished && data.result) {
-            this.passupGame.result = data.result
-            this.passupGame.status = 'finished'
-          }
-        }
-        return data
-      } catch (e) {
-        console.error('Make pass error', e)
-        throw e
-      } finally {
-        this.loading.passupGame = false
-      }
-    },
-    resetPassupGame() {
-      this.passupGame = {
-        status: 'open',
-        play_id: null,
-        level: 1,
-        score_user: 0,
-        score_bot: 0,
-        current_user_role: null,
-        shots: [],
-        result: null,
-        games: 0
       }
     },
 

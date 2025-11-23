@@ -24,7 +24,7 @@ const forwardedProps = useForwardProps(delegatedProps)
     :data-inset="inset ? '' : undefined"
     :data-variant="variant"
     v-bind="forwardedProps"
-    :class="cn(`focus:bg-gray-800 focus:text-white data-[variant=destructive]:text-red-400 data-[variant=destructive]:focus:bg-red-900/40 data-[variant=destructive]:focus:text-red-400 text-gray-300 relative flex cursor-default items-center gap-2 px-3 py-2 text-sm outline-hidden select-none data-[disabled]:pointer-events-none data-[disabled]:opacity-50 data-[inset]:pl-8 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4 hover:scale-105 transition-all`, props.class)"
+    :class="cn(`focus:bg-slate-100 dark:focus:bg-slate-700/50 focus:text-slate-900 dark:focus:text-slate-100 data-[variant=destructive]:text-rose-500 data-[variant=destructive]:focus:bg-rose-100/50 dark:data-[variant=destructive]:focus:bg-rose-900/30 data-[variant=destructive]:focus:text-rose-500 text-slate-600 dark:text-slate-300 relative flex cursor-default items-center gap-2 px-3 py-2 text-sm outline-hidden select-none data-[disabled]:pointer-events-none data-[disabled]:opacity-50 data-[inset]:pl-8 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4 rounded-lg transition-colors duration-150`, props.class)"
   >
     <slot />
   </DropdownMenuItem>

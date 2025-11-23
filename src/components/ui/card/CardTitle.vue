@@ -1,4 +1,5 @@
 <script setup lang="ts">
+// Monument Valley inspired CardTitle - elegant typography
 import type { HTMLAttributes } from "vue"
 import { cn } from "@/lib/utils"
 
@@ -10,7 +11,7 @@ const props = defineProps<{
 <template>
   <h3
     data-slot="card-title"
-    :class="cn('leading-none font-bold text-yellow-400 drop-shadow-[2px_2px_0px_rgba(0,0,0,1)] text-xl', props.class)"
+    :class="cn('leading-tight font-semibold text-slate-800 dark:text-slate-100 text-xl tracking-tight', props.class)"
   >
     <slot />
   </h3>

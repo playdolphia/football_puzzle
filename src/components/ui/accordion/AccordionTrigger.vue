@@ -22,11 +22,10 @@ const delegatedProps = reactiveOmit(props, "class")
       v-bind="delegatedProps"
       :class="
         cn(
-          'flex flex-1 items-start justify-between gap-4 py-4 text-left text-sm font-bold transition-all outline-none hover:bg-gray-800 disabled:pointer-events-none disabled:opacity-50 [&[data-state=open]>svg]:rotate-180 text-white',
+          'flex flex-1 items-start justify-between gap-4 py-4 text-left text-sm font-medium transition-all duration-200 outline-none hover:bg-slate-100/50 dark:hover:bg-slate-800/50 disabled:pointer-events-none disabled:opacity-50 [&[data-state=open]>svg]:rotate-180 text-slate-700 dark:text-slate-200 rounded-xl px-2 -mx-2',
           props.class,
         )
       "
-      style="border-radius: 0; font-family: 'Courier New', monospace;"
     >
       <slot />
       <slot name="icon">

@@ -12,14 +12,6 @@ const router = createRouter({
       }
     },
     {
-      path: '/game',
-      name: 'passup-game',
-      component: () => import('@/views/game/page.vue'),
-      meta: {
-        title: 'Pass Up - Play'
-      }
-    },
-    {
       path: '/leaderboard',
       name: 'passup-leaderboard',
       component: () => import('@/views/leaderboard/page.vue'),

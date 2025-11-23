@@ -9,52 +9,60 @@ defineProps<Props>()
 
 <template>
   <div class="text-center">
-    <!-- Minecraft-style blocky loader (soccer ball style) -->
-    <div class="relative w-20 h-20 mx-auto mb-6">
-      <div class="absolute inset-0 grid grid-cols-3 grid-rows-3 gap-1">
-        <div class="bg-green-700 border-4 border-green-950 shadow-[4px_4px_0px_0px_rgba(0,0,0,0.8)] animate-[bounce_0.8s_ease-in-out_infinite]" style="border-radius: 0; animation-delay: 0s;"></div>
-        <div class="bg-green-600 border-4 border-green-950 shadow-[4px_4px_0px_0px_rgba(0,0,0,0.8)] animate-[bounce_0.8s_ease-in-out_infinite]" style="border-radius: 0; animation-delay: 0.1s;"></div>
-        <div class="bg-green-700 border-4 border-green-950 shadow-[4px_4px_0px_0px_rgba(0,0,0,0.8)] animate-[bounce_0.8s_ease-in-out_infinite]" style="border-radius: 0; animation-delay: 0.2s;"></div>
-        <div class="bg-green-600 border-4 border-green-950 shadow-[4px_4px_0px_0px_rgba(0,0,0,0.8)] animate-[bounce_0.8s_ease-in-out_infinite]" style="border-radius: 0; animation-delay: 0.3s;"></div>
-        <div class="bg-white border-4 border-gray-950 shadow-[4px_4px_0px_0px_rgba(0,0,0,0.8)] animate-[bounce_0.8s_ease-in-out_infinite]" style="border-radius: 0; animation-delay: 0.4s;"></div>
-        <div class="bg-green-600 border-4 border-green-950 shadow-[4px_4px_0px_0px_rgba(0,0,0,0.8)] animate-[bounce_0.8s_ease-in-out_infinite]" style="border-radius: 0; animation-delay: 0.5s;"></div>
-        <div class="bg-green-700 border-4 border-green-950 shadow-[4px_4px_0px_0px_rgba(0,0,0,0.8)] animate-[bounce_0.8s_ease-in-out_infinite]" style="border-radius: 0; animation-delay: 0.6s;"></div>
-        <div class="bg-green-600 border-4 border-green-950 shadow-[4px_4px_0px_0px_rgba(0,0,0,0.8)] animate-[bounce_0.8s_ease-in-out_infinite]" style="border-radius: 0; animation-delay: 0.7s;"></div>
-        <div class="bg-green-700 border-4 border-green-950 shadow-[4px_4px_0px_0px_rgba(0,0,0,0.8)] animate-[bounce_0.8s_ease-in-out_infinite]" style="border-radius: 0; animation-delay: 0.8s;"></div>
+    <!-- Monument Valley style loader - soft, elegant, floating -->
+    <div class="relative w-32 h-32 mx-auto mb-8">
+      <!-- Soft glowing background -->
+      <div class="absolute inset-0 bg-gradient-to-br from-emerald-400/20 to-cyan-400/20 rounded-full blur-2xl animate-pulse"></div>
+
+      <!-- Floating dice emoji -->
+      <div class="absolute inset-0 flex items-center justify-center">
+        <div class="relative">
+          <span class="text-6xl drop-shadow-[0_4px_20px_rgba(255,255,255,0.3)] animate-float">🎲</span>
+        </div>
       </div>
+
+      <!-- Soft spinning ring -->
+      <div class="absolute inset-2 border-2 border-white/10 border-t-emerald-400/60 rounded-full animate-spin" style="animation-duration: 2s;"></div>
+
+      <!-- Outer glow ring -->
+      <div class="absolute inset-0 border border-white/5 rounded-full"></div>
     </div>
 
-    <!-- Title -->
-    <p
-      class="text-yellow-400 text-2xl font-bold mb-2"
-      style="font-family: 'Courier New', monospace; text-shadow: 3px 3px 0px rgba(0,0,0,0.8);"
-    >
+    <!-- Title - Monument Valley typography -->
+    <p class="text-slate-700 dark:text-slate-200 text-xl font-semibold tracking-wide mb-2">
       {{ title }}
     </p>
 
     <!-- Subtitle (optional) -->
-    <p
-      v-if="subtitle"
-      class="text-green-400 font-bold text-sm"
-      style="font-family: 'Courier New', monospace; text-shadow: 2px 2px 0px rgba(0,0,0,0.8);"
-    >
+    <p v-if="subtitle" class="text-slate-500 dark:text-slate-400 text-sm font-medium">
       {{ subtitle }}
     </p>
 
-    <!-- Animated dots -->
-    <div class="flex justify-center gap-2 mt-4">
+    <!-- Animated dots - soft rounded style -->
+    <div class="flex justify-center gap-2 mt-6">
       <div
-        class="w-3 h-3 bg-yellow-400 border-2 border-yellow-600 shadow-[2px_2px_0px_0px_rgba(0,0,0,0.8)] animate-[pulse_1.2s_ease-in-out_infinite]"
-        style="border-radius: 0; animation-delay: 0s;"
+        class="w-2 h-2 bg-emerald-400/80 rounded-full animate-pulse shadow-[0_0_8px_rgba(52,211,153,0.4)]"
+        style="animation-delay: 0s;"
       ></div>
       <div
-        class="w-3 h-3 bg-yellow-400 border-2 border-yellow-600 shadow-[2px_2px_0px_0px_rgba(0,0,0,0.8)] animate-[pulse_1.2s_ease-in-out_infinite]"
-        style="border-radius: 0; animation-delay: 0.3s;"
+        class="w-2 h-2 bg-emerald-400/80 rounded-full animate-pulse shadow-[0_0_8px_rgba(52,211,153,0.4)]"
+        style="animation-delay: 0.2s;"
       ></div>
       <div
-        class="w-3 h-3 bg-yellow-400 border-2 border-yellow-600 shadow-[2px_2px_0px_0px_rgba(0,0,0,0.8)] animate-[pulse_1.2s_ease-in-out_infinite]"
-        style="border-radius: 0; animation-delay: 0.6s;"
+        class="w-2 h-2 bg-emerald-400/80 rounded-full animate-pulse shadow-[0_0_8px_rgba(52,211,153,0.4)]"
+        style="animation-delay: 0.4s;"
       ></div>
     </div>
   </div>
 </template>
+
+<style scoped>
+@keyframes float {
+  0%, 100% { transform: translateY(0) scale(1); }
+  50% { transform: translateY(-8px) scale(1.02); }
+}
+
+.animate-float {
+  animation: float 3s ease-in-out infinite;
+}
+</style>

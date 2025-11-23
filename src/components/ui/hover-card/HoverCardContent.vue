@@ -29,11 +29,10 @@ const forwardedProps = useForwardProps(delegatedProps)
       v-bind="forwardedProps"
       :class="
         cn(
-          'bg-gradient-to-b from-gray-800 to-gray-900 text-white data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 data-[side=bottom]:slide-in-from-top-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2 z-50 w-64 border-4 border-gray-950 p-4 shadow-[4px_4px_0px_0px_rgba(0,0,0,0.8)] outline-hidden font-bold',
+          'bg-gradient-to-b from-slate-50/98 to-slate-100/98 dark:from-slate-800/98 dark:to-slate-900/98 text-slate-700 dark:text-slate-200 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 data-[side=bottom]:slide-in-from-top-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2 z-50 w-64 border border-slate-200/50 dark:border-slate-700/50 p-4 shadow-[0_8px_32px_-8px_rgba(0,0,0,0.15)] backdrop-blur-md outline-hidden rounded-2xl',
           props.class,
         )
       "
-      style="border-radius: 0; font-family: 'Courier New', monospace;"
     >
       <slot />
     </HoverCardContent>

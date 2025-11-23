@@ -16,11 +16,10 @@ const delegatedProps = reactiveOmit(props, "class")
     v-bind="delegatedProps"
     :class="
       cn(
-        'flex items-center gap-2 text-sm leading-none font-bold select-none group-data-[disabled=true]:pointer-events-none group-data-[disabled=true]:opacity-50 peer-disabled:cursor-not-allowed peer-disabled:opacity-50 text-white drop-shadow-[1px_1px_0px_rgba(0,0,0,0.8)]',
+        'flex items-center gap-2 text-sm leading-none font-medium select-none group-data-[disabled=true]:pointer-events-none group-data-[disabled=true]:opacity-50 peer-disabled:cursor-not-allowed peer-disabled:opacity-50 text-slate-700 dark:text-slate-200',
         props.class,
       )
     "
-    style="font-family: 'Courier New', monospace;"
   >
     <slot />
   </Label>

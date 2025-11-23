@@ -15,10 +15,9 @@ const delegatedProps = reactiveOmit(props, "class")
     data-slot="tabs-list"
     v-bind="delegatedProps"
     :class="cn(
-      'bg-gray-900 text-gray-300 inline-flex h-12 w-fit items-center justify-center border-4 border-gray-950 p-1 shadow-[4px_4px_0px_0px_rgba(0,0,0,0.8)]',
+      'bg-slate-100/80 dark:bg-slate-800/80 text-slate-600 dark:text-slate-300 inline-flex h-11 w-fit items-center justify-center border border-slate-200/50 dark:border-slate-700/50 p-1 shadow-[0_2px_8px_-2px_rgba(0,0,0,0.08)] backdrop-blur-sm rounded-xl gap-1',
       props.class,
     )"
-    style="border-radius: 0; font-family: 'Courier New', monospace;"
   >
     <slot />
   </TabsList>

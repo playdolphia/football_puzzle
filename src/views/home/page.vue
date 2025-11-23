@@ -149,13 +149,13 @@ onMounted(async () => {
       userData.value = tokenData
     }
 
-    // Check for ongoing passup game
-    const gameStatus = await globalStore.getPassupGameStatus()
+    // Check for ongoing ladder game
+    const gameStatus = await globalStore.joinLadderGame()
 
     // Only auto-redirect if there's an ongoing game AND user didn't intentionally leave
     // On page refresh (intentionallyLeftGame is false by default), we redirect to ongoing game
-    if (gameStatus && gameStatus.ok && gameStatus.status === 'ongoing' && !globalStore.intentionallyLeftGame) {
-      router.push('/game')
+    if (gameStatus && gameStatus.ok && globalStore.ladderGame.position && !globalStore.ladderGame.position.finished && !globalStore.intentionallyLeftGame) {
+      router.push('/ladder')
     }
 
     // Reset the flag if user is on home page (they can now start a new action)
@@ -289,10 +289,11 @@ onMounted(async () => {
                 <Dices class="w-5 h-5" />
                 {{ globalStore.canPlayGame ? 'Start Ladder Game' : 'Need Energy to Play' }}
               </Button>
-              <Button @click="goToLeaderboard" variant="outline" size="lg" class="gap-2">
+              <!-- Leaderboard button hidden until endpoint is ready -->
+              <!-- <Button @click="goToLeaderboard" variant="outline" size="lg" class="gap-2">
                 <Trophy class="w-5 h-5" />
                 View Leaderboard
-              </Button>
+              </Button> -->
               <Button @click="goToDolphia" variant="ghost" size="lg" class="gap-2">
                 <ArrowLeft class="w-5 h-5" />
                 Back to Dolphia

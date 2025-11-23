@@ -1,4 +1,5 @@
 <script setup lang="ts">
+// Monument Valley inspired Card - soft pastels, rounded corners, elegant shadows
 import type { HTMLAttributes } from "vue"
 import { cn } from "@/lib/utils"
 
@@ -15,12 +16,11 @@ const props = withDefaults(defineProps<{
     data-slot="card"
     :class="
       cn(
-        'bg-gradient-to-b from-gray-800 to-gray-900 text-white flex flex-col gap-6 border-8 border-gray-950 py-6 shadow-[8px_8px_0px_0px_rgba(0,0,0,0.9)]',
-        props.hoverable ? 'hover:scale-105 transition-all duration-200 cursor-pointer hover:shadow-[12px_12px_0px_0px_rgba(0,0,0,0.9)]' : '',
+        'bg-gradient-to-b from-slate-50/95 to-slate-100/95 dark:from-slate-800/95 dark:to-slate-900/95 text-slate-700 dark:text-slate-200 flex flex-col gap-4 border border-slate-200/50 dark:border-slate-700/50 py-6 rounded-3xl shadow-[0_8px_32px_-8px_rgba(0,0,0,0.1),0_4px_8px_-4px_rgba(0,0,0,0.05)] backdrop-blur-sm',
+        props.hoverable ? 'hover:scale-[1.02] transition-all duration-300 ease-out cursor-pointer hover:shadow-[0_12px_40px_-8px_rgba(0,0,0,0.15),0_6px_12px_-4px_rgba(0,0,0,0.08)]' : '',
         props.class,
       )
     "
-    style="border-radius: 0; font-family: 'Courier New', monospace;"
   >
     <slot />
   </div>

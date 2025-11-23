@@ -16,7 +16,7 @@ const forwardedProps = useForwardProps(delegatedProps)
   <AccordionItem
     data-slot="accordion-item"
     v-bind="forwardedProps"
-    :class="cn('border-b-4 border-gray-950 last:border-b-0', props.class)"
+    :class="cn('border-b border-slate-200/50 dark:border-slate-700/50 last:border-b-0', props.class)"
   >
     <slot />
   </AccordionItem>

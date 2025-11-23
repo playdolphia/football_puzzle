@@ -15,7 +15,6 @@ const props = defineProps<{
     data-slot="alert"
     :class="cn(alertVariants({ variant }), props.class)"
     role="alert"
-    style="border-radius: 0; font-family: 'Courier New', monospace;"
   >
     <slot />
   </div>

@@ -34,7 +34,7 @@ const forwardedProps = useForwardProps(delegatedProps)
         variant: context?.variant || variant,
         size: context?.size || size,
       }),
-      'min-w-0 flex-1 shrink-0 shadow-none border-l-0 first:border-l-4 focus:z-10 focus-visible:z-10',
+      'min-w-0 flex-1 shrink-0 shadow-none border-0 rounded-none first:rounded-l-lg last:rounded-r-lg focus:z-10 focus-visible:z-10',
       props.class)"
   >
     <slot v-bind="slotProps" />

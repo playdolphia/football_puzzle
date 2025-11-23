@@ -16,7 +16,7 @@ const forwardedProps = useForwardProps(delegatedProps)
   <DialogDescription
     data-slot="dialog-description"
     v-bind="forwardedProps"
-    :class="cn('text-gray-300 text-sm drop-shadow-[1px_1px_0px_rgba(0,0,0,1)]', props.class)"
+    :class="cn('text-slate-500 dark:text-slate-400 text-sm leading-relaxed', props.class)"
   >
     <slot />
   </DialogDescription>

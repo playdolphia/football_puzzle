@@ -19,16 +19,15 @@ const forwarded = useForwardPropsEmits(props, emits)
       data-slot="drawer-content"
       v-bind="forwarded"
       :class="cn(
-        `group/drawer-content bg-gradient-to-b from-gray-800 to-gray-900 border-4 border-gray-950 shadow-[8px_8px_0px_0px_rgba(0,0,0,0.9)] text-white font-bold fixed z-50 flex h-auto flex-col`,
-        `data-[vaul-drawer-direction=top]:inset-x-0 data-[vaul-drawer-direction=top]:top-0 data-[vaul-drawer-direction=top]:mb-24 data-[vaul-drawer-direction=top]:max-h-[80vh]`,
+        `group/drawer-content bg-gradient-to-b from-slate-50/98 to-slate-100/98 dark:from-slate-800/98 dark:to-slate-900/98 border border-slate-200/50 dark:border-slate-700/50 shadow-[0_-8px_32px_-8px_rgba(0,0,0,0.15)] backdrop-blur-md text-slate-700 dark:text-slate-200 fixed z-50 flex h-auto flex-col rounded-t-3xl`,
+        `data-[vaul-drawer-direction=top]:inset-x-0 data-[vaul-drawer-direction=top]:top-0 data-[vaul-drawer-direction=top]:mb-24 data-[vaul-drawer-direction=top]:max-h-[80vh] data-[vaul-drawer-direction=top]:rounded-t-none data-[vaul-drawer-direction=top]:rounded-b-3xl`,
         `data-[vaul-drawer-direction=bottom]:inset-x-0 data-[vaul-drawer-direction=bottom]:bottom-0 data-[vaul-drawer-direction=bottom]:mt-24 data-[vaul-drawer-direction=bottom]:max-h-[80vh]`,
-        `data-[vaul-drawer-direction=right]:inset-y-0 data-[vaul-drawer-direction=right]:right-0 data-[vaul-drawer-direction=right]:w-3/4 data-[vaul-drawer-direction=right]:sm:max-w-sm`,
-        `data-[vaul-drawer-direction=left]:inset-y-0 data-[vaul-drawer-direction=left]:left-0 data-[vaul-drawer-direction=left]:w-3/4 data-[vaul-drawer-direction=left]:sm:max-w-sm`,
+        `data-[vaul-drawer-direction=right]:inset-y-0 data-[vaul-drawer-direction=right]:right-0 data-[vaul-drawer-direction=right]:w-3/4 data-[vaul-drawer-direction=right]:sm:max-w-sm data-[vaul-drawer-direction=right]:rounded-l-3xl data-[vaul-drawer-direction=right]:rounded-r-none`,
+        `data-[vaul-drawer-direction=left]:inset-y-0 data-[vaul-drawer-direction=left]:left-0 data-[vaul-drawer-direction=left]:w-3/4 data-[vaul-drawer-direction=left]:sm:max-w-sm data-[vaul-drawer-direction=left]:rounded-r-3xl data-[vaul-drawer-direction=left]:rounded-l-none`,
         props.class,
       )"
-      style="border-radius: 0; font-family: 'Courier New', monospace;"
     >
-      <div class="bg-gray-700 mx-auto mt-4 hidden h-1 w-[100px] shrink-0 group-data-[vaul-drawer-direction=bottom]/drawer-content:block" style="border-radius: 0;" />
+      <div class="bg-slate-300 dark:bg-slate-600 mx-auto mt-4 hidden h-1.5 w-12 shrink-0 rounded-full group-data-[vaul-drawer-direction=bottom]/drawer-content:block" />
       <slot />
     </DrawerContent>
   </DrawerPortal>

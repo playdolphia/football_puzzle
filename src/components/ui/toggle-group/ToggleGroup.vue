@@ -33,8 +33,7 @@ const forwarded = useForwardPropsEmits(delegatedProps, emits)
     :data-size="size"
     :data-variant="variant"
     v-bind="forwarded"
-    :class="cn('group/toggle-group flex w-fit items-center border-4 border-gray-950 shadow-[4px_4px_0px_0px_rgba(0,0,0,0.8)]', props.class)"
-    style="border-radius: 0; font-family: 'Courier New', monospace;"
+    :class="cn('group/toggle-group flex w-fit items-center border border-slate-200/50 dark:border-slate-700/50 shadow-[0_2px_8px_-2px_rgba(0,0,0,0.08)] backdrop-blur-sm rounded-xl overflow-hidden', props.class)"
   >
     <slot v-bind="slotProps" />
   </ToggleGroupRoot>

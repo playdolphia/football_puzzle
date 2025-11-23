@@ -11,7 +11,6 @@ const props = defineProps<{
 <template>
   <NumberFieldInput
     data-slot="input"
-    :class="cn('flex h-10 w-full border-4 border-gray-950 bg-gray-800 py-2 text-sm text-center shadow-[2px_2px_0px_0px_rgba(0,0,0,0.8)] transition-colors placeholder:text-gray-500 focus-visible:outline-none focus-visible:border-blue-600 focus-visible:shadow-[4px_4px_0px_0px_rgba(0,0,0,0.8)] disabled:cursor-not-allowed disabled:opacity-50 text-white font-bold', props.class)"
-    style="border-radius: 0; font-family: 'Courier New', monospace;"
+    :class="cn('flex h-11 w-full border border-slate-200/50 dark:border-slate-700/50 bg-white/80 dark:bg-slate-800/80 py-2 text-sm text-center shadow-[0_2px_8px_-2px_rgba(0,0,0,0.08)] transition-all duration-200 placeholder:text-slate-400 focus-visible:outline-none focus-visible:border-emerald-400 focus-visible:shadow-[0_4px_12px_-2px_rgba(16,185,129,0.2)] focus-visible:ring-2 focus-visible:ring-emerald-400/20 disabled:cursor-not-allowed disabled:opacity-50 text-slate-700 dark:text-slate-200 font-medium rounded-xl backdrop-blur-sm', props.class)"
   />
 </template>

@@ -22,16 +22,14 @@ const forwarded = useForwardPropsEmits(delegatedProps, emits)
       props.class,
     )"
     v-bind="forwarded"
-    style="font-family: 'Courier New', monospace;"
   >
     <SliderTrack
       data-slot="slider-track"
-      class="bg-gray-800 relative grow overflow-hidden border-2 border-gray-950 shadow-[2px_2px_0px_0px_rgba(0,0,0,0.8)] data-[orientation=horizontal]:h-3 data-[orientation=horizontal]:w-full data-[orientation=vertical]:h-full data-[orientation=vertical]:w-3"
-      style="border-radius: 0;"
+      class="bg-slate-200 dark:bg-slate-700 relative grow overflow-hidden shadow-inner data-[orientation=horizontal]:h-2 data-[orientation=horizontal]:w-full data-[orientation=vertical]:h-full data-[orientation=vertical]:w-2 rounded-full"
     >
       <SliderRange
         data-slot="slider-range"
-        class="bg-blue-700 absolute data-[orientation=horizontal]:h-full data-[orientation=vertical]:w-full"
+        class="bg-gradient-to-r from-emerald-400 to-emerald-500 absolute data-[orientation=horizontal]:h-full data-[orientation=vertical]:w-full rounded-full"
       />
     </SliderTrack>
 
@@ -39,8 +37,7 @@ const forwarded = useForwardPropsEmits(delegatedProps, emits)
       v-for="(_, key) in modelValue"
       :key="key"
       data-slot="slider-thumb"
-      class="border-blue-950 bg-white block size-5 shrink-0 border-4 shadow-[3px_3px_0px_0px_rgba(0,0,0,0.8)] transition-all hover:scale-110 focus-visible:scale-110 focus-visible:outline-hidden disabled:pointer-events-none disabled:opacity-50"
-      style="border-radius: 0;"
+      class="border-2 border-emerald-500 bg-white dark:bg-slate-100 block size-5 shrink-0 shadow-[0_2px_8px_-2px_rgba(16,185,129,0.4)] transition-all duration-200 hover:scale-110 hover:shadow-[0_4px_12px_-2px_rgba(16,185,129,0.5)] focus-visible:scale-110 focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-emerald-400/30 disabled:pointer-events-none disabled:opacity-50 rounded-full"
     />
   </SliderRoot>
 </template>

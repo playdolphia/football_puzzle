@@ -10,7 +10,7 @@ const props = defineProps<{
 <template>
   <tfoot
     data-slot="table-footer"
-    :class="cn('bg-muted/50 border-t font-medium [&>tr]:last:border-b-0', props.class)"
+    :class="cn('bg-slate-50/50 dark:bg-slate-800/50 border-t border-slate-200/50 dark:border-slate-700/50 font-medium [&>tr]:last:border-b-0', props.class)"
   >
     <slot />
   </tfoot>
