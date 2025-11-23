@@ -662,7 +662,6 @@ watch(currentPosition, () => {
     <div class="absolute top-4 left-4 z-20">
       <Button @click="confirmGoBack" size="icon" class="bg-white/10 hover:bg-white/20 border border-white/20 backdrop-blur-md rounded-xl shadow-[0_4px_12px_-4px_rgba(0,0,0,0.2)] transition-all duration-200">
         <ArrowLeft class="w-4 h-4" />
-        <span class="hidden sm:inline ml-1">Back</span>
       </Button>
     </div>
 
@@ -728,17 +727,36 @@ watch(currentPosition, () => {
     </div>
 
     <!-- Game Board -->
-    <div v-else-if="gamePhase === 'playing'" class="flex-1 flex flex-col overflow-hidden relative">
+    <div v-else-if="gamePhase === 'playing'" class="flex-1 flex flex-col overflow-hidden relative mt-10">
       <!-- Scrollable Game Board -->
       <div
         ref="gameBoardRef"
         class="flex-1 overflow-hidden p-4"
       >
         <div class="max-w-lg mx-auto">
-          <!-- Finish zone - Monument Valley soft glassmorphism style -->
-          <div class="mb-4 p-5 bg-gradient-to-r from-amber-500/20 to-yellow-500/20 backdrop-blur-md border border-amber-400/30 rounded-2xl text-center relative overflow-hidden shadow-[0_4px_24px_-8px_rgba(251,191,36,0.3)]">
+          <!-- Header - Finish line and roll count -->
+          <div class="mb-4 p-3 bg-gradient-to-r from-amber-500/20 to-yellow-500/20 backdrop-blur-md border border-amber-400/30 rounded-2xl relative overflow-hidden shadow-[0_4px_24px_-8px_rgba(251,191,36,0.3)]">
             <div class="absolute inset-0 bg-gradient-to-b from-white/5 to-transparent"></div>
-            <span class="text-xl font-semibold text-amber-300 relative z-10 tracking-wide">🏆 FINISH LINE 🏆</span>
+            <div class="relative z-10 flex items-center justify-between">
+              <!-- Roll count -->
+              <div class="flex items-center gap-2">
+                <span class="text-2xl">🎲</span>
+                <div class="text-left">
+                  <p class="text-amber-200/60 text-xs">Rolls</p>
+                  <p class="text-xl font-semibold text-white">{{ ladderGame.position?.rolls ?? 0 }}</p>
+                </div>
+              </div>
+              <!-- Finish line -->
+              <span class="text-lg font-semibold text-amber-300 tracking-wide">🏆 FINISH 🏆</span>
+              <!-- Current position -->
+              <div class="flex items-center gap-2">
+                <div class="text-right">
+                  <p class="text-amber-200/60 text-xs">Position</p>
+                  <p class="text-xl font-semibold text-white">{{ currentPosition }}/100</p>
+                </div>
+                <span class="text-2xl">📍</span>
+              </div>
+            </div>
           </div>
 
           <!-- Grid rows (top to bottom, which is 100 to 1) -->

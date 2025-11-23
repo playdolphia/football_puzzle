@@ -59,7 +59,7 @@ const goBack = () => {
     <!-- Back button with Minecraft style -->
     <div class="container mx-auto max-w-4xl">
       <div class="mb-4">
-        <Button @click="goBack" size="icon" class="pixel-corners bg-stone-600 hover:bg-stone-700 border-2 border-stone-800">
+        <Button @click="goBack" size="sm" class="pixel-corners bg-stone-600 hover:bg-stone-700 border-2 border-stone-800">
           <ArrowLeft class="w-4 h-4" />
           <span class="hidden sm:inline">Back to Home</span>
           <span class="sm:hidden">Back</span>
