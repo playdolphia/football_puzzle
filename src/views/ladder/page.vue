@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted, computed, watch } from 'vue'
+import { ref, onMounted, onUnmounted, computed, watch, nextTick } from 'vue'
 import { useRouter } from 'vue-router'
 import { useGlobalStore } from '@/stores'
 import { Button } from '@/components/ui/button'
@@ -14,6 +14,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import { toast } from 'vue-sonner'
+import gsap from 'gsap'
 
 const router = useRouter()
 const globalStore = useGlobalStore()
@@ -29,6 +30,7 @@ const diceRolling = ref(false)
 // Animation state for dolphin movement
 const animatedPosition = ref<number>(0) // Current animated position
 const isMovingDolphin = ref(false)
+const dolphinDirection = ref<'left' | 'right'>('right') // Track dolphin facing direction
 
 // Countdown to next challenge (12 AM UTC)
 const nextChallengeCountdown = ref('')
@@ -156,6 +158,173 @@ const ladderColors = [
 // Game board ref for scrolling
 const gameBoardRef = ref<HTMLElement | null>(null)
 const gridContainerRef = ref<HTMLElement | null>(null)
+const temperatureBar = ref<HTMLElement | null>(null)
+
+// GSAP animation for dashed lines, tiles, and temperature
+const svgLinesRef = ref<SVGSVGElement | null>(null)
+let lineAnimations: gsap.core.Tween[] = []
+const hasAnimatedTiles = ref(false) // Track if tiles have been animated
+let temperatureAnimation: gsap.core.Timeline | null = null
+const overlayPathsRef = ref<SVGPathElement[]>([])
+const allPoints: number[][] = []
+const numPoints = 10
+const numPaths = 3
+
+const animateConnectionLines = () => {
+  // Kill any existing animations
+  lineAnimations.forEach(anim => anim.kill())
+  lineAnimations = []
+
+  if (!svgLinesRef.value) return
+
+  // Animate all lines with dash offset
+  const lines = svgLinesRef.value.querySelectorAll('line')
+  lines.forEach((line) => {
+    // Create looping dash offset animation
+    const animation = gsap.to(line, {
+      strokeDashoffset: -20, // Move the dash pattern
+      duration: 1.5,
+      ease: 'none',
+      repeat: -1, // Loop infinitely
+    })
+    lineAnimations.push(animation)
+  })
+}
+
+const animateTilesIn = () => {
+  if (hasAnimatedTiles.value || !gridContainerRef.value) return
+  hasAnimatedTiles.value = true
+
+  // Get all cell elements
+  const cells = gridContainerRef.value.querySelectorAll('[data-cell]')
+
+  // Set initial state - invisible and scaled down
+  gsap.set(cells, {
+    opacity: 0,
+    scale: 0.3,
+    rotationZ: -15
+  })
+
+  // Animate cells in with stagger - from bottom-right to top-left (cell 1 to 100)
+  // Reverse the array so cell 100 animates first (top-left)
+  const cellsArray = Array.from(cells).reverse()
+
+  gsap.to(cellsArray, {
+    opacity: 1,
+    scale: 1,
+    rotationZ: 0,
+    duration: 0.4,
+    ease: 'back.out(1.7)',
+    stagger: {
+      each: 0.015, // Very quick - total ~1.5 seconds for all 100 tiles
+      from: 'start', // Start from first item (cell 100)
+    },
+    onComplete: () => {
+      // After tiles are done, animate in the connection lines
+      nextTick(() => animateConnectionLines())
+    }
+  })
+}
+
+// Render function to update SVG paths
+const renderOverlayPaths = () => {
+  for (let i = 0; i < numPaths; i++) {
+    const path = overlayPathsRef.value[i]
+    if (!path) continue
+
+    const points = allPoints[i]
+    let d = ''
+
+    // Start from top-left, draw curve to bottom based on points
+    d += `M 0 0 V ${points[0]} C`
+
+    for (let j = 0; j < numPoints - 1; j++) {
+      const p = (j + 1) / (numPoints - 1) * 100
+      const cp = p - (1 / (numPoints - 1) * 100) / 2
+      d += ` ${cp} ${points[j]} ${cp} ${points[j + 1]} ${p} ${points[j + 1]}`
+    }
+
+    d += ` V 100 H 0`
+    path.setAttribute('d', d)
+  }
+}
+
+const animateTemperature = (toPosition: number) => {
+  if (!overlayPathsRef.value.length) return
+
+  // Kill previous animation
+  if (temperatureAnimation) {
+    temperatureAnimation.kill()
+  }
+
+  // Calculate target height: 0% at position 0, 100% at position 100
+  // Paths should fill from bottom (100) to top (0)
+  const targetHeight = 100 - toPosition
+
+  const tl = gsap.timeline({
+    onUpdate: () => renderOverlayPaths()
+  })
+
+  const delayPointsMax = 0.3
+  const delayPerPath = 0.25
+  const pointsDelay: number[] = []
+
+  // Random delays for each point
+  for (let i = 0; i < numPoints; i++) {
+    pointsDelay[i] = Math.random() * delayPointsMax
+  }
+
+  // Animate each path
+  for (let i = 0; i < numPaths; i++) {
+    const points = allPoints[i]
+    const pathDelay = delayPerPath * i
+
+    for (let j = 0; j < numPoints; j++) {
+      const delay = pointsDelay[j]
+      tl.to(points, {
+        [j]: targetHeight,
+        duration: 0.9,
+        ease: 'power2.inOut'
+      }, delay + pathDelay)
+    }
+  }
+
+  temperatureAnimation = tl
+}
+
+// Get harmonic colors based on selected field - Instagram-like gradients
+const getHarmonicColor1 = () => {
+  const fieldId = ladderGame.value.selectedField
+  const harmonics: Record<string, string> = {
+    'grass': '#10b981', // emerald-500
+    'desert': '#f59e0b', // amber-500
+    'ice': '#06b6d4', // cyan-500
+    'lava': '#f59e0b' // amber-500 (orange complement)
+  }
+  return harmonics[fieldId || 'grass'] || harmonics.grass
+}
+
+const getHarmonicColor2 = () => {
+  const fieldId = ladderGame.value.selectedField
+  const harmonics: Record<string, string> = {
+    'grass': '#a855f7', // purple-500 (complementary to green)
+    'desert': '#ec4899', // pink-500 (vibrant contrast)
+    'ice': '#8b5cf6', // violet-500 (complementary to cyan)
+    'lava': '#ec4899' // pink-500 (magenta complement)
+  }
+  return harmonics[fieldId || 'grass'] || harmonics.grass
+}
+
+const getHarmonicColor3 = () => {
+  const fieldId = ladderGame.value.selectedField
+  const harmonics: Record<string, string> = {
+    'grass': '#3b82f6', // blue-500 (cool contrast)
+    'desert': '#8b5cf6', // violet-500 (purple complement)
+    'ice': '#ec4899', // pink-500 (warm contrast)
+    'lava': '#eab308' // yellow-500 (warm complement)
+  }
+  return harmonics[fieldId || 'grass'] || harmonics.grass
+}
 
 // Computed
 const ladderGame = computed(() => globalStore.ladderGame)
@@ -244,6 +413,53 @@ const getCellGridPosition = (cellNumber: number): { row: number; col: number } =
   const col = rowFromTop % 2 === 0 ? posInRow : 9 - posInRow
 
   return { row: rowFromTop, col }
+}
+
+// Get dolphin direction based on cell position (snake pattern)
+const getDolphinDirectionForCell = (cellNumber: number): 'left' | 'right' => {
+  const rowFromTop = Math.floor((100 - cellNumber) / 10)
+  // Even rows (0, 2, 4...) go left to right, odd rows (1, 3, 5...) go right to left
+  // But we need to flip because the dolphin emoji naturally faces left
+  return rowFromTop % 2 === 0 ? 'left' : 'right'
+}
+
+// Get the endpoint position for connection lines
+// Source (start) comes from the corner closest to target, destination (end) is center of tile
+const getLineEndpoint = (fromCell: number, toCell: number, isStart: boolean): { x: string; y: string } => {
+  const fromPos = getCellGridPosition(fromCell)
+  const toPos = getCellGridPosition(toCell)
+
+  // Cell size is 10% of grid
+  const cellSize = 10
+
+  if (isStart) {
+    // For the starting point, pick the corner closest to the target
+    const goingRight = toPos.col > fromPos.col
+    const goingLeft = toPos.col < fromPos.col
+    const goingUp = toPos.row < fromPos.row
+    const goingDown = toPos.row > fromPos.row
+
+    const padding = 0.8 // Small padding from corner (in percentage points)
+    let xOffset = 0.5 // Default center
+    let yOffset = 0.5
+
+    if (goingRight) xOffset = 1 - padding / cellSize
+    else if (goingLeft) xOffset = padding / cellSize
+
+    if (goingUp) yOffset = padding / cellSize
+    else if (goingDown) yOffset = 1 - padding / cellSize
+
+    return {
+      x: `${(fromPos.col + xOffset) * cellSize}%`,
+      y: `${(fromPos.row + yOffset) * cellSize}%`
+    }
+  } else {
+    // For the destination, always use center of the tile
+    return {
+      x: `${(toPos.col + 0.5) * cellSize}%`,
+      y: `${(toPos.row + 0.5) * cellSize}%`
+    }
+  }
 }
 
 // Get cell type info with field-themed colors
@@ -389,13 +605,20 @@ const initializeGame = async () => {
       // Load players
       await globalStore.getLadderPlayers()
 
-      // Initialize animated position
+      // Initialize animated position and dolphin direction based on current row
       animatedPosition.value = currentPosition.value
+      dolphinDirection.value = getDolphinDirectionForCell(currentPosition.value)
 
       if (ladderGame.value.selectedField) {
         // Resume existing game
         gamePhase.value = 'playing'
-        setTimeout(() => scrollToPlayer(), 500)
+        setTimeout(() => {
+          scrollToPlayer()
+          nextTick(() => {
+            animateTilesIn()
+            animateTemperature(currentPosition.value)
+          })
+        }, 100)
       } else {
         // Need to select field
         gamePhase.value = 'field-select'
@@ -432,13 +655,21 @@ const selectField = async (fieldId: string) => {
 
       await globalStore.getLadderPlayers()
 
-      // Initialize animated position to current position
+      // Initialize animated position and dolphin direction based on current row
       animatedPosition.value = currentPosition.value
+      dolphinDirection.value = getDolphinDirectionForCell(currentPosition.value)
 
       gamePhase.value = 'playing'
 
       // Scroll to player position after a short delay
-      setTimeout(() => scrollToPlayer(), 500)
+      setTimeout(() => {
+        scrollToPlayer()
+        nextTick(() => {
+          animateTilesIn()
+          // Wait a bit longer for overlay SVG refs to be ready
+          setTimeout(() => animateTemperature(currentPosition.value), 600)
+        })
+      }, 100)
 
       toast.success('Game started!')
     } else {
@@ -501,6 +732,11 @@ const animateDolphinMovement = async (from: number, to: number, event: string): 
       }
 
       const nextCell = steps[stepIndex]
+
+      // Update dolphin direction based on the snake pattern row direction
+      dolphinDirection.value = getDolphinDirectionForCell(nextCell)
+
+      // Now update the animated position
       animatedPosition.value = nextCell
 
       // Scroll to keep dolphin visible
@@ -578,6 +814,9 @@ const rollDice = async () => {
       // The dolphin is still showing at fromPosition due to isMovingDolphin being true
       await animateDolphinMovement(fromPosition, result.to, result.event)
 
+      // Animate background temperature after dolphin finishes moving
+      animateTemperature(result.to)
+
       // Show event toast after movement
       animateMovementToast(result)
 
@@ -636,6 +875,22 @@ const goBackToHome = () => {
 
 onMounted(() => {
   initializeGame()
+
+  // Initialize points array for overlay paths
+  for (let i = 0; i < numPaths; i++) {
+    const points = []
+    for (let j = 0; j < numPoints; j++) {
+      points.push(100)
+    }
+    allPoints.push(points)
+  }
+
+  // Initialize overlay animation after a delay to ensure refs are set
+  setTimeout(() => {
+    if (overlayPathsRef.value.length > 0) {
+      animateTemperature(currentPosition.value)
+    }
+  }, 500)
 })
 
 onUnmounted(() => {
@@ -643,6 +898,13 @@ onUnmounted(() => {
   if (countdownInterval) {
     clearInterval(countdownInterval)
     countdownInterval = null
+  }
+
+  // Clean up GSAP animations
+  lineAnimations.forEach(anim => anim.kill())
+  lineAnimations = []
+  if (temperatureAnimation) {
+    temperatureAnimation.kill()
   }
 })
 
@@ -653,7 +915,52 @@ watch(currentPosition, () => {
 </script>
 
 <template>
-  <div class="min-h-screen w-full flex flex-col overflow-hidden" :class="`bg-gradient-to-b ${selectedField.color}`">
+  <div class="min-h-screen w-full flex flex-col overflow-hidden relative">
+    <!-- Morphing overlay background (only show during gameplay) -->
+    <div v-if="gamePhase === 'playing'" class="absolute inset-0 pointer-events-none overflow-hidden">
+      <svg class="shape-overlays w-full h-full" viewBox="0 0 100 100" preserveAspectRatio="none">
+        <defs>
+          <!-- Animated gradient based on selected field theme with harmonious colors -->
+          <linearGradient id="gradient1" x1="0%" y1="0%" x2="0%" y2="100%">
+            <stop offset="0%" stop-color="#1a1a1a" stop-opacity="0.95">
+              <animate attributeName="stop-color" :values="`#1a1a1a; #2d1b2e; #1a1a1a`" dur="8s" repeatCount="indefinite" />
+            </stop>
+            <stop offset="50%" :stop-color="selectedField.accentColor" stop-opacity="0.7">
+              <animate attributeName="stop-color" :values="`${selectedField.accentColor}; ${getHarmonicColor1()}; ${selectedField.accentColor}`" dur="8s" repeatCount="indefinite" />
+            </stop>
+            <stop offset="100%" :stop-color="selectedField.accentColor">
+              <animate attributeName="stop-color" :values="`${selectedField.accentColor}; ${getHarmonicColor2()}; ${selectedField.accentColor}`" dur="8s" repeatCount="indefinite" />
+            </stop>
+          </linearGradient>
+          <linearGradient id="gradient2" x1="0%" y1="0%" x2="0%" y2="100%">
+            <stop offset="0%" stop-color="#2a2a2a" stop-opacity="0.85">
+              <animate attributeName="stop-color" :values="`#2a2a2a; #3d2a3d; #2a2a2a`" dur="9s" repeatCount="indefinite" />
+            </stop>
+            <stop offset="50%" :stop-color="getHarmonicColor1()" stop-opacity="0.75">
+              <animate attributeName="stop-color" :values="`${getHarmonicColor1()}; ${selectedField.accentColor}; ${getHarmonicColor1()}`" dur="9s" repeatCount="indefinite" />
+            </stop>
+            <stop offset="100%" :stop-color="selectedField.accentColor" stop-opacity="0.9">
+              <animate attributeName="stop-color" :values="`${selectedField.accentColor}; ${getHarmonicColor3()}; ${selectedField.accentColor}`" dur="9s" repeatCount="indefinite" />
+            </stop>
+          </linearGradient>
+          <linearGradient id="gradient3" x1="0%" y1="0%" x2="0%" y2="100%">
+            <stop offset="0%" stop-color="#1f1f1f" stop-opacity="0.9">
+              <animate attributeName="stop-color" :values="`#1f1f1f; #2e1f2e; #1f1f1f`" dur="10s" repeatCount="indefinite" />
+            </stop>
+            <stop offset="50%" :stop-color="getHarmonicColor2()" stop-opacity="0.8">
+              <animate attributeName="stop-color" :values="`${getHarmonicColor2()}; ${getHarmonicColor3()}; ${getHarmonicColor2()}`" dur="10s" repeatCount="indefinite" />
+            </stop>
+            <stop offset="100%" :stop-color="selectedField.accentColor" stop-opacity="0.95">
+              <animate attributeName="stop-color" :values="`${selectedField.accentColor}; ${getHarmonicColor1()}; ${selectedField.accentColor}`" dur="10s" repeatCount="indefinite" />
+            </stop>
+          </linearGradient>
+        </defs>
+        <path :ref="el => { if (el) overlayPathsRef[0] = el as SVGPathElement }" class="shape-overlays__path" fill="url(#gradient1)"></path>
+        <path :ref="el => { if (el) overlayPathsRef[1] = el as SVGPathElement }" class="shape-overlays__path" fill="url(#gradient2)"></path>
+        <path :ref="el => { if (el) overlayPathsRef[2] = el as SVGPathElement }" class="shape-overlays__path" fill="url(#gradient3)"></path>
+      </svg>
+    </div>
+
     <!-- Animated background pattern -->
     <div class="absolute inset-0 opacity-20 pointer-events-none">
       <div class="absolute inset-0 bg-pattern animate-float"></div>
@@ -738,25 +1045,44 @@ watch(currentPosition, () => {
           <!-- Header - Finish line and roll count -->
           <div class="mb-4 p-3 bg-gradient-to-r from-amber-500/20 to-yellow-500/20 backdrop-blur-md border border-amber-400/30 rounded-2xl relative overflow-hidden shadow-[0_4px_24px_-8px_rgba(251,191,36,0.3)]">
             <div class="absolute inset-0 bg-gradient-to-b from-white/5 to-transparent"></div>
-            <div class="relative z-10 flex items-center justify-between">
-              <!-- Roll count -->
-              <div class="flex items-center gap-2">
-                <span class="text-2xl">🎲</span>
-                <div class="text-left">
-                  <p class="text-amber-200/60 text-xs">Rolls</p>
-                  <p class="text-xl font-semibold text-white">{{ ladderGame.position?.rolls ?? 0 }}</p>
+
+            <div class="relative z-10">
+              <!-- Top row with stats -->
+              <div class="flex items-center justify-between mb-2">
+                <!-- Roll count -->
+                <div class="flex items-center gap-2">
+                  <span class="text-2xl">🎲</span>
+                  <div class="text-left">
+                    <p class="text-amber-200/60 text-xs">Rolls</p>
+                    <p class="text-xl font-semibold text-white">{{ ladderGame.position?.rolls ?? 0 }}</p>
+                  </div>
+                </div>
+                <!-- Finish line -->
+                <div class="flex flex-col items-center gap-1">
+                  <span class="text-lg font-semibold text-amber-300 tracking-wide">🏆 FINISH 🏆</span>
+                  <!-- Reward claimed indicator below FINISH -->
+                  <div
+                    class="flex items-center gap-1.5 px-2.5 py-0.5 rounded-full backdrop-blur-sm border transition-all duration-300"
+                    :class="ladderGame.grid?.reward_clamed
+                      ? 'bg-green-500/20 border-green-400/40'
+                      : 'bg-purple-500/20 border-purple-400/40'"
+                  >
+                    <span class="text-xs">{{ ladderGame.grid?.reward_clamed ? '✓' : '🎁' }}</span>
+                    <span class="text-[9px] font-medium text-white/90">
+                      {{ ladderGame.grid?.reward_clamed ? 'Claimed' : 'Unclaimed' }}
+                    </span>
+                  </div>
+                </div>
+                <!-- Current position -->
+                <div class="flex items-center gap-2">
+                  <div class="text-right">
+                    <p class="text-amber-200/60 text-xs">Position</p>
+                    <p class="text-xl font-semibold text-white">{{ currentPosition }}/100</p>
+                  </div>
+                  <span class="text-2xl">📍</span>
                 </div>
               </div>
-              <!-- Finish line -->
-              <span class="text-lg font-semibold text-amber-300 tracking-wide">🏆 FINISH 🏆</span>
-              <!-- Current position -->
-              <div class="flex items-center gap-2">
-                <div class="text-right">
-                  <p class="text-amber-200/60 text-xs">Position</p>
-                  <p class="text-xl font-semibold text-white">{{ currentPosition }}/100</p>
-                </div>
-                <span class="text-2xl">📍</span>
-              </div>
+
             </div>
           </div>
 
@@ -765,25 +1091,26 @@ watch(currentPosition, () => {
             <!-- Grid wrapper with SVG overlay -->
             <div class="relative">
               <!-- SVG overlay for connection lines - using field theme colors -->
-              <svg class="absolute inset-0 w-full h-full pointer-events-none z-10">
-                <!-- Connection lines -->
+              <svg ref="svgLinesRef" class="absolute inset-0 w-full h-full pointer-events-none z-10">
+                <!-- Connection lines - starting from corner closest to target, both are dashed -->
                 <g v-for="line in connectionLines" :key="`${line.from}-${line.to}`">
                   <line
-                    :x1="`${(getCellGridPosition(line.from).col + 0.5) * 10}%`"
-                    :y1="`${(getCellGridPosition(line.from).row + 0.5) * 10}%`"
-                    :x2="`${(getCellGridPosition(line.to).col + 0.5) * 10}%`"
-                    :y2="`${(getCellGridPosition(line.to).row + 0.5) * 10}%`"
+                    :x1="getLineEndpoint(line.from, line.to, true).x"
+                    :y1="getLineEndpoint(line.from, line.to, true).y"
+                    :x2="getLineEndpoint(line.from, line.to, false).x"
+                    :y2="getLineEndpoint(line.from, line.to, false).y"
                     :stroke="line.type === 'ladder' ? selectedField.ladderColor : selectedField.botColor"
-                    stroke-width="3"
+                    stroke-width="2.5"
                     stroke-linecap="round"
-                    :stroke-dasharray="line.type === 'bot' ? '8,4' : 'none'"
-                    opacity="0.9"
+                    stroke-dasharray="8 4"
+                    stroke-dashoffset="0"
+                    opacity="0.85"
                   />
-                  <!-- Circle at destination -->
+                  <!-- Circle at destination corner -->
                   <circle
-                    :cx="`${(getCellGridPosition(line.to).col + 0.5) * 10}%`"
-                    :cy="`${(getCellGridPosition(line.to).row + 0.5) * 10}%`"
-                    r="5"
+                    :cx="getLineEndpoint(line.from, line.to, false).x"
+                    :cy="getLineEndpoint(line.from, line.to, false).y"
+                    r="4"
                     :fill="line.type === 'ladder' ? selectedField.ladderColor : selectedField.botColor"
                     opacity="1"
                   />
@@ -830,16 +1157,21 @@ watch(currentPosition, () => {
                   v-if="(isMovingDolphin ? animatedPosition : currentPosition) === cell.number"
                   class="absolute inset-0 flex items-center justify-center"
                 >
-                  <span
-                    class="text-xl sm:text-2xl drop-shadow-[0_4px_12px_rgba(255,255,255,0.4)] transition-transform duration-200"
-                    :class="isMovingDolphin ? 'scale-110' : 'animate-bounce'"
-                  >🐬</span>
+                  <div class="inline-block" :style="{ transform: dolphinDirection === 'right' ? 'scaleX(-1)' : 'scaleX(1)' }">
+                    <span
+                      class="text-xl sm:text-2xl drop-shadow-[0_4px_12px_rgba(255,255,255,0.4)] transition-all duration-300"
+                      :class="isMovingDolphin ? '' : 'animate-bounce'"
+                      :style="{
+                        transform: isMovingDolphin ? 'scale(1.1)' : 'scale(1)'
+                      }"
+                    >🐬</span>
+                  </div>
                 </div>
 
                 <!-- Hover tooltip for special cells - Monument Valley glassmorphism -->
                 <div
                   v-if="cell.destination || cell.isLadderDest"
-                  class="absolute -top-10 left-1/2 -translate-x-1/2 bg-white/10 backdrop-blur-md text-white text-[9px] px-3 py-1.5 rounded-lg whitespace-nowrap opacity-0 group-hover:opacity-100 transition-all duration-200 z-30 pointer-events-none border border-white/20 shadow-lg"
+                  class="absolute -top-10 left-1/2 -translate-x-1/2 bg-black/40 backdrop-blur-md text-white text-[9px] px-3 py-1.5 rounded-lg whitespace-nowrap opacity-0 group-hover:opacity-100 transition-all duration-200 z-30 pointer-events-none border border-white/20 shadow-lg"
                 >
                   <template v-if="cell.isLadder">⚽ Pass up to {{ cell.destination }}</template>
                   <template v-else-if="cell.isBot">🤖 Bot to {{ cell.destination }}</template>

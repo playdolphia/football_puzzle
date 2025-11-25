@@ -74,6 +74,7 @@ interface LadderGameGrid {
   started_at: string
   finished: boolean
   finished_at: string | null
+  reward_clamed: boolean
   countdown: string
   grid: GridCell[]
 }
@@ -102,6 +103,18 @@ interface LadderGameState {
   lastRoll: RollResult | null
 }
 
+// Daily Top Player for leaderboard
+interface DailyTopPlayer {
+  id: number
+  nickname: string
+  avatar: string
+  user_id: number
+  position: number
+  rolls: number
+  finished: boolean
+  finished_at: string | null
+}
+
 export const useGlobalStore = defineStore('global', {
   state: () => {
     return {
@@ -128,6 +141,8 @@ export const useGlobalStore = defineStore('global', {
         isRolling: false,
         lastRoll: null
       } as LadderGameState,
+      // Daily top players for leaderboard
+      dailyTopPlayers: [] as DailyTopPlayer[],
       loading: {
         walletAddress: false,
         pendingTasksCount: false,
@@ -135,7 +150,8 @@ export const useGlobalStore = defineStore('global', {
         avatars: false,
         userProfile: false,
         energy: false,
-        ladderGame: false
+        ladderGame: false,
+        dailyTop: false
       }
     };
   },
@@ -533,6 +549,7 @@ export const useGlobalStore = defineStore('global', {
               started_at: responseData.grid.started_at,
               finished: responseData.grid.finished,
               finished_at: responseData.grid.finished_at,
+              reward_clamed: responseData.grid.reward_clamed || false,
               countdown: responseData.grid.countdown,
               grid: responseData.grid.grid || []
             }
@@ -608,6 +625,28 @@ export const useGlobalStore = defineStore('global', {
       } catch (e) {
         console.error('Get ladder players error', e)
         return []
+      }
+    },
+
+    // Get daily top players for leaderboard - GET /PassUp/DailyTop
+    async getDailyTop() {
+      try {
+        if (!this.apiToken) throw new Error('API token is missing')
+        this.loading.dailyTop = true
+
+        const data = await apiRequest('/PassUp/DailyTop', { method: 'GET', skipTlg: true }, this.apiToken)
+
+        if (data && Array.isArray(data)) {
+          // Sort by rolls ascending (fewest rolls first)
+          this.dailyTopPlayers = data.sort((a, b) => a.rolls - b.rolls)
+        }
+
+        return data
+      } catch (e) {
+        console.error('Get daily top players error', e)
+        return []
+      } finally {
+        this.loading.dailyTop = false
       }
     },
 

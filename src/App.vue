@@ -13,7 +13,7 @@ const globalStore = useGlobalStore()
     <router-view />
   </div>
   
-  <Toaster />
+  <Toaster position="top-center" />
   
   <!-- Admin Sheet (globally available to admins) -->
   <AdminSheet v-if="globalStore.isOriginalAdmin" />

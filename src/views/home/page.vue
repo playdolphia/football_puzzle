@@ -289,11 +289,10 @@ onMounted(async () => {
                 <Dices class="w-5 h-5" />
                 {{ globalStore.canPlayGame ? 'Start Ladder Game' : 'Need Energy to Play' }}
               </Button>
-              <!-- Leaderboard button hidden until endpoint is ready -->
-              <!-- <Button @click="goToLeaderboard" variant="outline" size="lg" class="gap-2">
+              <Button @click="goToLeaderboard" variant="outline" size="lg" class="gap-2">
                 <Trophy class="w-5 h-5" />
                 View Leaderboard
-              </Button> -->
+              </Button>
               <Button @click="goToDolphia" variant="ghost" size="lg" class="gap-2">
                 <ArrowLeft class="w-5 h-5" />
                 Back to Dolphia
