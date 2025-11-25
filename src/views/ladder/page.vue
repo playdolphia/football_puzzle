@@ -565,7 +565,8 @@ const rollDice = async () => {
         clearInterval(rollAnimation)
         diceRolling.value = false
 
-        if (result && result.ok) {
+        // Always show the actual dice value from the response (even if roll was invalid)
+        if (result && result.dice) {
           diceValue.value = result.dice
         }
         resolve()
