@@ -326,6 +326,11 @@ const getHarmonicColor3 = () => {
   return harmonics[fieldId || 'grass'] || harmonics.grass
 }
 
+// Get gradient colors for dolphin cell - always red for visibility
+const getDolphinCellGradient = () => {
+  return ['#ef4444', '#f87171', '#dc2626'] // red gradient
+}
+
 // Computed
 const ladderGame = computed(() => globalStore.ladderGame)
 const currentPosition = computed(() => ladderGame.value.position?.start ?? 0)
@@ -810,6 +815,9 @@ const rollDice = async () => {
     })
 
     if (result && result.ok) {
+      // Wait a moment after showing dice value before dolphin starts moving
+      await new Promise<void>((resolve) => setTimeout(resolve, 2000))
+
       // Now animate the dolphin movement AFTER dice is shown
       // The dolphin is still showing at fromPosition due to isMovingDolphin being true
       await animateDolphinMovement(fromPosition, result.to, result.event)
@@ -1126,18 +1134,24 @@ watch(currentPosition, () => {
                 v-for="cell in row"
                 :key="cell.number"
                 :data-cell="cell.number"
-                class="relative w-[10%] aspect-square rounded-lg flex flex-col items-center justify-center transition-all duration-300 group backdrop-blur-sm"
+                class="relative w-[10%] aspect-square rounded-lg flex flex-col items-center justify-center transition-all duration-300 group"
                 :style="{
-                  border: `1px solid ${selectedField.cellBorder}`,
+                  border: (isMovingDolphin ? animatedPosition : currentPosition) === cell.number
+                    ? `2px solid ${selectedField.accentColor}`
+                    : `1px solid ${selectedField.cellBorder}`,
+                  background: (isMovingDolphin ? animatedPosition : currentPosition) === cell.number
+                    ? `radial-gradient(circle at center, ${getDolphinCellGradient()[1]} 0%, ${getDolphinCellGradient()[0]} 50%, ${getDolphinCellGradient()[2]} 100%)`
+                    : 'rgba(0,0,0,0.35)',
+                  backdropFilter: 'blur(8px)',
                   boxShadow: (isMovingDolphin ? animatedPosition : currentPosition) === cell.number
-                    ? `0 0 20px ${selectedField.accentColorLight}, inset 0 1px 0 rgba(255,255,255,0.1)`
+                    ? `0 0 30px ${getDolphinCellGradient()[0]}, 0 0 60px ${getDolphinCellGradient()[1]}80, 0 0 90px ${getDolphinCellGradient()[2]}40, inset 0 0 25px rgba(255,255,255,0.3), inset 0 1px 0 rgba(255,255,255,0.3)`
                     : 'inset 0 1px 0 rgba(255,255,255,0.05)',
                 }"
                 :class="[
                   cell.class,
-                  // Player position styling - using field accent color
+                  // Player position styling - using field accent color with enhanced visibility
                   (isMovingDolphin ? animatedPosition : currentPosition) === cell.number
-                    ? (cell.number === 100 ? 'ring-2 ring-yellow-400/60 scale-110 z-20 animate-pulse-slow' : 'ring-2 scale-110 z-20 animate-pulse-slow')
+                    ? (cell.number === 100 ? 'ring-2 ring-yellow-400/60 scale-110 z-20 animate-pulse-slow' : 'ring-2 scale-115 z-20 animate-pulse-slow')
                     : 'hover:scale-105 hover:z-10',
                   // Ladder/bot cell highlighting with softer borders
                   (cell.isLadder || cell.isLadderDest) ? 'cell-ladder-themed' : '',

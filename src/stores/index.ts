@@ -588,12 +588,16 @@ export const useGlobalStore = defineStore('global', {
         if (data) {
           this.ladderGame.lastRoll = data
 
+          // Always update rolls count from response (even on invalid rolls)
+          if (this.ladderGame.position && data.rolls !== undefined) {
+            this.ladderGame.position.rolls = data.rolls
+          }
+
           // Update position if roll was successful
           if (data.ok && this.ladderGame.position) {
             this.ladderGame.position = {
               ...this.ladderGame.position,
               start: data.to,
-              rolls: data.rolls || (this.ladderGame.position.rolls + 1),
               finished: data.finished
             }
           }
