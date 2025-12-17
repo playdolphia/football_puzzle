@@ -1,1 +1,1 @@
-# Dolphia Pass Up Game
+# Dolphia Club Management Game
