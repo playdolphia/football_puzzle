@@ -38,83 +38,6 @@ interface UserProfile {
   }
 }
 
-// PassUp Ladder Game Types
-interface GridCell {
-  id: number
-  game_id: number
-  cell: number
-  type: 'empty' | 'pass' | 'bot' | 'reward'
-  value: number
-}
-
-interface PlayerPosition {
-  id: number
-  game_id: number
-  user_id: number
-  start: number
-  rolls: number
-  finished: boolean
-}
-
-interface GamePlayer {
-  id: number
-  user_id: number
-  nickname?: string
-  avatar?: string
-  position: number
-  rolls: number
-  finished: boolean
-  finished_at: string | null
-}
-
-interface LadderGameGrid {
-  id: number
-  date: string
-  seed: number
-  started_at: string
-  finished: boolean
-  finished_at: string | null
-  reward_clamed: boolean
-  countdown: string
-  grid: GridCell[]
-}
-
-interface RollResult {
-  ok: boolean
-  dice: number
-  from: number
-  to: number
-  rolls?: number
-  event: 'move' | 'bot' | 'pass' | 'invalid'
-  reward?: {
-    type: string
-    amount: number
-  } | null
-  finished: boolean
-  reason?: string
-}
-
-interface LadderGameState {
-  grid: LadderGameGrid | null
-  position: PlayerPosition | null
-  players: GamePlayer[]
-  selectedField: string | null
-  isRolling: boolean
-  lastRoll: RollResult | null
-}
-
-// Daily Top Player for leaderboard
-interface DailyTopPlayer {
-  id: number
-  nickname: string
-  avatar: string
-  user_id: number
-  position: number
-  rolls: number
-  finished: boolean
-  finished_at: string | null
-}
-
 export const useGlobalStore = defineStore('global', {
   state: () => {
     return {
@@ -131,27 +54,13 @@ export const useGlobalStore = defineStore('global', {
       userProfile: null as UserProfile | null,
       transferToken: null as string | null,
       userEnergyPercentage: 0, // User's energy level (0-100)
-      intentionallyLeftGame: false, // Track if user manually left the game
-      // Ladder game state
-      ladderGame: {
-        grid: null,
-        position: null,
-        players: [],
-        selectedField: null,
-        isRolling: false,
-        lastRoll: null
-      } as LadderGameState,
-      // Daily top players for leaderboard
-      dailyTopPlayers: [] as DailyTopPlayer[],
       loading: {
         walletAddress: false,
         pendingTasksCount: false,
         tokenSum: false,
         avatars: false,
         userProfile: false,
-        energy: false,
-        ladderGame: false,
-        dailyTop: false
+        energy: false
       }
     };
   },
@@ -523,151 +432,6 @@ export const useGlobalStore = defineStore('global', {
         return { ok: false, message: err?.message || 'Failed to load energy data.' }
       } finally {
         this.loading.energy = false
-      }
-    },
-
-    // ========== Ladder Game Actions ==========
-
-    // Join the ladder game - GET /PassUp/Join
-    async joinLadderGame() {
-      try {
-        if (!this.apiToken) throw new Error('API token is missing')
-        this.loading.ladderGame = true
-
-        const data = await apiRequest('/PassUp/Join', { method: 'GET', skipTlg: true }, this.apiToken)
-
-        if (data && data.ok) {
-          // API returns { ok, data: { grid: { ...gridInfo, grid: [...cells] }, position: {...} } }
-          const responseData = data.data || data
-
-          // Handle grid data - can be nested in data.grid or directly in data
-          if (responseData.grid) {
-            this.ladderGame.grid = {
-              id: responseData.grid.id,
-              date: responseData.grid.date,
-              seed: responseData.grid.seed,
-              started_at: responseData.grid.started_at,
-              finished: responseData.grid.finished,
-              finished_at: responseData.grid.finished_at,
-              reward_clamed: responseData.grid.reward_clamed || false,
-              countdown: responseData.grid.countdown,
-              grid: responseData.grid.grid || []
-            }
-          }
-
-          // Handle position data
-          if (responseData.position) {
-            this.ladderGame.position = {
-              id: responseData.position.id,
-              game_id: responseData.position.game_id,
-              user_id: responseData.position.user_id,
-              start: responseData.position.start,
-              rolls: responseData.position.rolls,
-              finished: responseData.position.finished
-            }
-          }
-        }
-
-        return data
-      } catch (e) {
-        console.error('Join ladder game error', e)
-        throw e
-      } finally {
-        this.loading.ladderGame = false
-      }
-    },
-
-    // Roll dice - GET /PassUp/Roll
-    async rollLadderDice() {
-      try {
-        if (!this.apiToken) throw new Error('API token is missing')
-        this.ladderGame.isRolling = true
-
-        const data = await apiRequest('/PassUp/Roll', { method: 'GET', skipTlg: true }, this.apiToken) as RollResult
-
-        if (data) {
-          this.ladderGame.lastRoll = data
-
-          // Always update rolls count from response (even on invalid rolls)
-          if (this.ladderGame.position && data.rolls !== undefined) {
-            this.ladderGame.position.rolls = data.rolls
-          }
-
-          // Update position if roll was successful
-          if (data.ok && this.ladderGame.position) {
-            this.ladderGame.position = {
-              ...this.ladderGame.position,
-              start: data.to,
-              finished: data.finished
-            }
-          }
-        }
-
-        return data
-      } catch (e) {
-        console.error('Roll dice error', e)
-        throw e
-      } finally {
-        this.ladderGame.isRolling = false
-      }
-    },
-
-    // Get all players - GET /PassUp/Players
-    async getLadderPlayers() {
-      try {
-        if (!this.apiToken) throw new Error('API token is missing')
-
-        const data = await apiRequest('/PassUp/Players', { method: 'GET', skipTlg: true }, this.apiToken)
-
-        if (data && Array.isArray(data)) {
-          this.ladderGame.players = data
-        } else if (data && data.players) {
-          this.ladderGame.players = data.players
-        }
-
-        return data
-      } catch (e) {
-        console.error('Get ladder players error', e)
-        return []
-      }
-    },
-
-    // Get daily top players for leaderboard - GET /PassUp/DailyTop
-    async getDailyTop() {
-      try {
-        if (!this.apiToken) throw new Error('API token is missing')
-        this.loading.dailyTop = true
-
-        const data = await apiRequest('/PassUp/DailyTop', { method: 'GET', skipTlg: true }, this.apiToken)
-
-        if (data && Array.isArray(data)) {
-          // Sort by rolls ascending (fewest rolls first)
-          this.dailyTopPlayers = data.sort((a, b) => a.rolls - b.rolls)
-        }
-
-        return data
-      } catch (e) {
-        console.error('Get daily top players error', e)
-        return []
-      } finally {
-        this.loading.dailyTop = false
-      }
-    },
-
-    // Set selected field/stadium
-    setLadderField(field: string) {
-      this.ladderGame.selectedField = field
-    },
-
-    // Reset ladder game state
-    resetLadderGame() {
-      this.ladderGame = {
-        grid: null,
-        position: null,
-        players: [],
-        selectedField: null,
-        isRolling: false,
-        lastRoll: null
       }
     }
   }

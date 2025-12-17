@@ -8,23 +8,23 @@ const router = createRouter({
       name: 'home',
       component: () => import('@/views/home/page.vue'),
       meta: {
-        title: 'Pass Up - Dolphia'
+        title: 'Club Management - Dolphia'
       }
     },
     {
       path: '/leaderboard',
-      name: 'passup-leaderboard',
+      name: 'club-leaderboard',
       component: () => import('@/views/leaderboard/page.vue'),
       meta: {
-        title: 'Pass Up Leaderboard'
+        title: 'Club Management Leaderboard'
       }
     },
     {
-      path: '/ladder',
-      name: 'ladder-game',
-      component: () => import('@/views/ladder/page.vue'),
+      path: '/game',
+      name: 'club-game',
+      component: () => import('@/views/game/page.vue'),
       meta: {
-        title: 'Pass Up Ladder'
+        title: 'Club Management Game'
       }
     },
     // 404 page

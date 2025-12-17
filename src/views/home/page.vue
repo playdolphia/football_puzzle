@@ -5,24 +5,13 @@ import { useGlobalStore } from '@/stores'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
-import { AlertCircle, ArrowLeft, Trophy, Zap, Dices } from 'lucide-vue-next'
+import { AlertCircle, ArrowLeft, Trophy } from 'lucide-vue-next'
 import Loader from '@/components/layouts/Loader.vue'
 
 const router = useRouter()
 const globalStore = useGlobalStore()
 const userData = ref(null)
 const error = ref('')
-
-const startLadderGame = () => {
-  // Check if user has enough energy
-  if (!globalStore.canPlayGame) {
-    return // Button should be disabled, but extra check
-  }
-
-  // Clear the intentionally left flag when user starts a new game
-  globalStore.intentionallyLeftGame = false
-  router.push('/ladder')
-}
 
 const goToProfile = () => {
   const originUrl = import.meta.env.VITE_ORIGIN_URL || 'http://localhost:5173'
@@ -32,11 +21,6 @@ const goToProfile = () => {
 const goToDolphia = () => {
   const originUrl = import.meta.env.VITE_ORIGIN_URL || 'http://localhost:5173'
   window.open(originUrl, '_self')
-}
-
-const goToBuyEnergy = () => {
-  const originUrl = import.meta.env.VITE_ORIGIN_URL || 'http://localhost:5173'
-  window.open(`${originUrl}/user/profile/marketplace`, '_self')
 }
 
 const goToLeaderboard = () => {
@@ -148,20 +132,6 @@ onMounted(async () => {
 
       userData.value = tokenData
     }
-
-    // Check for ongoing ladder game
-    const gameStatus = await globalStore.joinLadderGame()
-
-    // Only auto-redirect if there's an ongoing game AND user didn't intentionally leave
-    // On page refresh (intentionallyLeftGame is false by default), we redirect to ongoing game
-    if (gameStatus && gameStatus.ok && globalStore.ladderGame.position && !globalStore.ladderGame.position.finished && !globalStore.intentionallyLeftGame) {
-      router.push('/ladder')
-    }
-
-    // Reset the flag if user is on home page (they can now start a new action)
-    if (globalStore.intentionallyLeftGame) {
-      globalStore.intentionallyLeftGame = false
-    }
   } catch (err) {
     error.value = 'Failed to process authentication token'
     console.error('Token processing error:', err)
@@ -204,7 +174,7 @@ onMounted(async () => {
                   </AvatarFallback>
                 </Avatar>
                 <div>
-                  <div class="text-lg">Welcome to Pass Up!</div>
+                  <div class="text-lg">Welcome to Club Management!</div>
                   <div class="text-sm text-muted-foreground hover:text-primary transition-colors">
                     {{ globalStore.userProfile?.user_info?.display_name || 
                        (globalStore.user?.first_name + ' ' + globalStore.user?.last_name) }}
@@ -264,30 +234,10 @@ onMounted(async () => {
               Test your passing skills and earn tokens!
             </p>
 
-            <!-- No Energy Warning -->
-            <div v-if="!globalStore.canPlayGame" class="mb-6 p-4 bg-red-500/10 border border-red-500/20 rounded-lg">
-              <div class="flex items-center justify-center gap-2 text-red-500 mb-2">
-                <AlertCircle class="w-5 h-5" />
-                <span class="font-semibold">Insufficient Energy</span>
-              </div>
-            <p class="text-sm text-muted-foreground mb-3">
-                You need at least 20% energy to play Pass Up.
-              </p>
-              <Button @click="goToBuyEnergy" variant="default" class="gap-2 w-full">
-                <Zap class="w-4 h-4" />
-                Buy Energy from Profile
-              </Button>
-            </div>
-
-            <div class="flex flex-col gap-3">
-              <Button
-                @click="startLadderGame"
-                size="lg"
-                class="gap-2"
-                :disabled="!globalStore.canPlayGame"
-              >
-                <Dices class="w-5 h-5" />
-                {{ globalStore.canPlayGame ? 'Start Ladder Game' : 'Need Energy to Play' }}
+            <div class="flex flex-col gap-3 mt-6">
+              <Button @click="router.push('/game')" variant="default" size="lg" class="gap-2">
+                <Trophy class="w-5 h-5" />
+                Play Game
               </Button>
               <Button @click="goToLeaderboard" variant="outline" size="lg" class="gap-2">
                 <Trophy class="w-5 h-5" />
@@ -304,7 +254,7 @@ onMounted(async () => {
 
       <!-- Loading State -->
       <div v-else class="flex items-center justify-center min-h-[50vh]">
-        <Loader title="LOADING PASS UP" subtitle="Preparing the field..." />
+        <Loader title="LOADING CLUB MANAGEMENT" subtitle="Preparing..." />
       </div>
     </div>
   </div>
