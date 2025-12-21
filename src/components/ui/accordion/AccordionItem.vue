@@ -5,9 +5,12 @@ import { reactiveOmit } from "@vueuse/core"
 import { AccordionItem, useForwardProps } from "reka-ui"
 import { cn } from "@/lib/utils"
 
-const props = defineProps<AccordionItemProps & { class?: HTMLAttributes["class"] }>()
+const props = defineProps<AccordionItemProps & {
+  class?: HTMLAttributes["class"]
+  variant?: 'default' | 'game'
+}>()
 
-const delegatedProps = reactiveOmit(props, "class")
+const delegatedProps = reactiveOmit(props, "class", "variant")
 
 const forwardedProps = useForwardProps(delegatedProps)
 </script>
@@ -16,7 +19,14 @@ const forwardedProps = useForwardProps(delegatedProps)
   <AccordionItem
     data-slot="accordion-item"
     v-bind="forwardedProps"
-    :class="cn('border-b border-slate-200/50 dark:border-slate-700/50 last:border-b-0', props.class)"
+    :class="cn(
+      'border-b last:border-b-0',
+      // Default variant
+      props.variant !== 'game' && 'border-slate-200/50 dark:border-slate-700/50',
+      // MV3 game variant
+      props.variant === 'game' && 'border-white/10',
+      props.class
+    )"
   >
     <slot />
   </AccordionItem>

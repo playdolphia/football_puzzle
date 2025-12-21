@@ -1,12 +1,9 @@
 <script setup lang="ts">
 import { useRouter } from 'vue-router'
-import { useGlobalStore } from '@/stores'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
-import { ArrowLeft } from 'lucide-vue-next'
+import { ArrowLeft, Trophy } from 'lucide-vue-next'
 
 const router = useRouter()
-const globalStore = useGlobalStore()
 
 const goBack = () => {
   router.push('/')
@@ -14,27 +11,42 @@ const goBack = () => {
 </script>
 
 <template>
-  <div class="min-h-screen w-full bg-gradient-to-b from-slate-900 via-slate-800 to-slate-900 relative">
+  <div class="min-h-screen w-full bg-[#0a0812] relative">
     <!-- Back button -->
     <div class="absolute top-4 left-4 z-20">
-      <Button @click="goBack" size="icon" class="bg-white/10 hover:bg-white/20 border border-white/20 backdrop-blur-md rounded-xl shadow-[0_4px_12px_-4px_rgba(0,0,0,0.2)] transition-all duration-200">
-        <ArrowLeft class="w-4 h-4" />
+      <Button @click="goBack" variant="game-icon" size="game-icon">
+        <ArrowLeft class="w-5 h-5" />
       </Button>
     </div>
 
-    <div class="container mx-auto max-w-2xl px-4 py-6 pt-20">
-      <Card class="bg-white/5 backdrop-blur-xl border border-white/10 rounded-3xl">
-        <CardHeader>
-          <CardTitle class="text-2xl text-white text-center">Leaderboard</CardTitle>
-        </CardHeader>
-        <CardContent class="p-12 text-center">
-          <div class="w-20 h-20 mx-auto mb-6 bg-white/10 rounded-2xl flex items-center justify-center">
-            <span class="text-5xl">🏆</span>
+    <div class="container mx-auto max-w-md px-4 py-6 pt-20">
+      <div class="space-y-8 text-center">
+        <!-- Header -->
+        <h1 class="text-white uppercase tracking-widest text-sm font-medium">Leaderboard</h1>
+
+        <!-- Separator -->
+        <div class="h-[1px] w-full bg-white/10" />
+
+        <!-- Coming Soon Content -->
+        <div class="py-12 space-y-6">
+          <div class="w-16 h-16 mx-auto border border-white/20 flex items-center justify-center">
+            <Trophy class="w-8 h-8 text-[#4fd4d4]" />
           </div>
-          <h3 class="text-xl font-semibold text-white mb-2">Coming Soon</h3>
-          <p class="text-white/50 mb-6">The leaderboard will be available soon!</p>
-        </CardContent>
-      </Card>
+
+          <div class="space-y-2">
+            <h2 class="text-white text-lg font-light">Coming Soon</h2>
+            <p class="text-white/40 text-sm">The leaderboard will be available soon!</p>
+          </div>
+        </div>
+
+        <!-- Separator -->
+        <div class="h-[1px] w-full bg-white/10" />
+
+        <Button @click="goBack" variant="game-ghost" size="game" class="w-full gap-2">
+          <ArrowLeft class="w-4 h-4" />
+          Back to Home
+        </Button>
+      </div>
     </div>
   </div>
 </template>

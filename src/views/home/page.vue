@@ -2,11 +2,11 @@
 import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useGlobalStore } from '@/stores'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
-import { AlertCircle, ArrowLeft, Trophy } from 'lucide-vue-next'
+import { AlertCircle, ArrowLeft, Trophy, Zap, Users } from 'lucide-vue-next'
 import Loader from '@/components/layouts/Loader.vue'
+import EnergyBar from '@/components/layouts/EnergyBar.vue'
 
 const router = useRouter()
 const globalStore = useGlobalStore()
@@ -140,121 +140,118 @@ onMounted(async () => {
 </script>
 
 <template>
-  <div class="min-h-screen bg-background">
-    <div class="container mx-auto px-4 py-4">
+  <div class="min-h-screen bg-[#0a0812] relative">
+    <!-- Background Image with 70% transparency -->
+    <div
+      class="absolute inset-0 bg-cover bg-center bg-no-repeat opacity-15"
+      style="background-image: url('/bg.webp');"
+    ></div>
+
+    <div class="container mx-auto px-4 py-6 relative z-10">
       <!-- Error State -->
-      <Card v-if="error" class="max-w-md mx-auto border-destructive">
-        <CardHeader>
-          <CardTitle class="flex items-center gap-2 text-destructive">
+      <div v-if="error" class="max-w-md mx-auto">
+        <div class="border border-rose-400/30 bg-rose-500/5 p-6 space-y-4">
+          <div class="flex items-center gap-3 text-rose-400">
             <AlertCircle class="w-5 h-5" />
-            Authentication Error
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <p class="text-sm text-muted-foreground mb-4">{{ error }}</p>
-          <p class="text-sm mb-4">Please return to Dolphia and try again.</p>
-          <Button @click="goToDolphia" variant="outline" class="w-full">
+            <span class="uppercase tracking-wide text-sm font-medium">Authentication Error</span>
+          </div>
+          <p class="text-white/60 text-sm">{{ error }}</p>
+          <p class="text-white/40 text-xs">Please return to Dolphia and try again.</p>
+          <Button @click="goToDolphia" variant="game-outline" size="game" class="w-full">
             Return to Dolphia
           </Button>
-        </CardContent>
-      </Card>
+        </div>
+      </div>
 
       <!-- Game Interface -->
-      <div v-else-if="userData && globalStore.userProfile" class="max-w-2xl mx-auto space-y-4">
+      <div v-else-if="userData && globalStore.userProfile" class="max-w-md mx-auto space-y-8">
         <!-- Welcome Header -->
-        <Card>
-          <CardHeader>
-            <CardTitle class="flex items-center gap-3">
-              <button @click="goToProfile" class="flex items-center gap-3 text-left hover:opacity-80 transition-opacity cursor-pointer">
-                <Avatar class="w-12 h-12">
-                  <AvatarImage :src="globalStore.userProfile?.user_info?.avatar || globalStore.avatar" />
-                  <AvatarFallback>
-                    {{ globalStore.userProfile?.user_info?.display_name?.split(' ')?.map(i => i[0])?.join('') || 
-                       (globalStore.user?.first_name?.[0] + (globalStore.user?.last_name?.[0] || '')) }}
-                  </AvatarFallback>
-                </Avatar>
-                <div>
-                  <div class="text-lg">Welcome to Club Management!</div>
-                  <div class="text-sm text-muted-foreground hover:text-primary transition-colors">
-                    {{ globalStore.userProfile?.user_info?.display_name || 
-                       (globalStore.user?.first_name + ' ' + globalStore.user?.last_name) }}
-                  </div>
-                </div>
-              </button>
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div class="space-y-4">
-              <div class="grid grid-cols-2 gap-4 text-sm">
-                <div>
-                  <span class="text-muted-foreground">Tokens:</span>
-                  <span class="font-medium ml-2">{{ globalStore.tokenSum || 0 }}</span>
-                </div>
-                <div>
-                  <span class="text-muted-foreground">Accuracy:</span>
-                  <span class="font-medium ml-2">
-                    {{ globalStore.userProfile?.rate ? Math.round(globalStore.userProfile.rate.accuracy * 100) : 0 }}%
-                  </span>
-                </div>
-              </div>
-
-              <!-- Energy Display -->
-              <div class="space-y-2 border-t pt-3">
-                <div class="flex items-center justify-between">
-                  <div class="flex items-center gap-2">
-                    <Zap :class="globalStore.energyPercentage > 0 ? 'text-yellow-500' : 'text-muted-foreground'" class="w-4 h-4" />
-                    <span class="text-sm font-medium">Energy</span>
-                  </div>
-                  <span class="text-sm font-bold" :class="globalStore.energyPercentage >= 20 ? 'text-green-500' : 'text-red-500'">
-                    {{ globalStore.energyPercentage }}%
-                  </span>
-                </div>
-                <div class="h-2 bg-muted rounded-full overflow-hidden">
-                  <div
-                    class="h-full transition-all duration-300"
-                    :class="globalStore.energyPercentage >= 20 ? 'bg-yellow-500' : 'bg-red-500'"
-                    :style="{ width: `${globalStore.energyPercentage}%` }"
-                  ></div>
-                </div>
-                <p v-if="globalStore.energyPercentage < 20" class="text-xs text-red-500">
-                  ⚠️ Each game requires 20% energy
+        <div class="space-y-6">
+          <!-- Profile Section -->
+          <button @click="goToProfile" class="w-full text-left group">
+            <div class="flex items-center gap-4">
+              <Avatar variant="game" class="w-14 h-14">
+                <AvatarImage :src="globalStore.userProfile?.user_info?.avatar || globalStore.avatar || ''" />
+                <AvatarFallback variant="game" class="text-lg">
+                  {{ globalStore.userProfile?.user_info?.display_name?.split(' ')?.map((i: string) => i[0])?.join('') ||
+                     ((globalStore.user as any)?.first_name?.[0] + ((globalStore.user as any)?.last_name?.[0] || '')) }}
+                </AvatarFallback>
+              </Avatar>
+              <div>
+                <h1 class="text-white text-lg font-light">Welcome to Club Management!</h1>
+                <p class="text-[#4fd4d4] text-sm group-hover:text-[#7fe5e5] transition-colors">
+                  {{ globalStore.userProfile?.user_info?.display_name ||
+                     ((globalStore.user as any)?.first_name + ' ' + (globalStore.user as any)?.last_name) }}
                 </p>
               </div>
             </div>
-          </CardContent>
-        </Card>
+          </button>
 
-        <!-- Game Area -->
-        <Card>
-          <CardHeader>
-            <CardTitle>Ready to Play?</CardTitle>
-          </CardHeader>
-          <CardContent class="text-center">
-            <p class="text-muted-foreground mb-6">
-              Test your passing skills and earn tokens!
-            </p>
-
-            <div class="flex flex-col gap-3 mt-6">
-              <Button @click="router.push('/game')" variant="default" size="lg" class="gap-2">
-                <Trophy class="w-5 h-5" />
-                Play Game
-              </Button>
-              <Button @click="goToLeaderboard" variant="outline" size="lg" class="gap-2">
-                <Trophy class="w-5 h-5" />
-                View Leaderboard
-              </Button>
-              <Button @click="goToDolphia" variant="ghost" size="lg" class="gap-2">
-                <ArrowLeft class="w-5 h-5" />
-                Back to Dolphia
-              </Button>
+          <!-- Stats Row -->
+          <div class="flex items-center justify-between text-sm border-b border-white/10 pb-4">
+            <div>
+              <span class="text-white/40 uppercase tracking-widest text-xs">Tokens:</span>
+              <span class="text-white/80 ml-2 font-medium">{{ globalStore.tokenSum || 0 }}</span>
             </div>
-          </CardContent>
-        </Card>
+            <div>
+              <span class="text-white/40 uppercase tracking-widest text-xs">Accuracy:</span>
+              <span class="text-white/80 ml-2 font-medium">
+                {{ globalStore.userProfile?.rate ? Math.round(globalStore.userProfile.rate.accuracy * 100) : 0 }}%
+              </span>
+            </div>
+          </div>
+
+          <!-- Energy Display - MV3 Style -->
+          <EnergyBar :value="globalStore.energyPercentage" />
+        </div>
+
+        <!-- Main Actions -->
+        <div class="space-y-6 pt-4">
+          <div class="text-center space-y-2">
+            <h2 class="text-white/70 uppercase tracking-widest text-xs font-medium">Club Management</h2>
+            <p class="text-white/40 text-sm">
+              Build your club, train players, and compete in leagues!
+            </p>
+          </div>
+
+          <!-- Separator -->
+          <div class="h-[1px] w-full bg-white/10" />
+
+          <div class="flex flex-col gap-4">
+            <Button
+              @click="router.push('/game')"
+              variant="game-primary"
+              size="game-lg"
+              class="w-full gap-3"
+            >
+              <Users class="w-5 h-5" />
+              My Club
+            </Button>
+            <Button
+              @click="goToLeaderboard"
+              variant="game-outline"
+              size="game"
+              class="w-full gap-3"
+            >
+              <Trophy class="w-5 h-5" />
+              View Leaderboard
+            </Button>
+            <Button
+              @click="goToDolphia"
+              variant="game-ghost"
+              size="game"
+              class="w-full gap-3"
+            >
+              <ArrowLeft class="w-5 h-5" />
+              Back to Dolphia
+            </Button>
+          </div>
+        </div>
       </div>
 
       <!-- Loading State -->
-      <div v-else class="flex items-center justify-center min-h-[50vh]">
-        <Loader title="LOADING CLUB MANAGEMENT" subtitle="Preparing..." />
+      <div v-else class="flex items-center justify-center min-h-[80vh]">
+        <Loader variant="game" title="LOADING CLUB MANAGEMENT" subtitle="Preparing..." />
       </div>
     </div>
   </div>

@@ -33,7 +33,14 @@ const forwarded = useForwardPropsEmits(delegatedProps, emits)
     :data-size="size"
     :data-variant="variant"
     v-bind="forwarded"
-    :class="cn('group/toggle-group flex w-fit items-center border border-slate-200/50 dark:border-slate-700/50 shadow-[0_2px_8px_-2px_rgba(0,0,0,0.08)] backdrop-blur-sm rounded-xl overflow-hidden', props.class)"
+    :class="cn(
+      'group/toggle-group flex w-fit items-center overflow-hidden',
+      // Default variant
+      props.variant !== 'game' && 'border border-slate-200/50 dark:border-slate-700/50 shadow-[0_2px_8px_-2px_rgba(0,0,0,0.08)] backdrop-blur-sm rounded-xl',
+      // MV3 game variant
+      props.variant === 'game' && 'border-0 border-b border-white/10 rounded-none gap-4',
+      props.class
+    )"
   >
     <slot v-bind="slotProps" />
   </ToggleGroupRoot>

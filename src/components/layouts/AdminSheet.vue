@@ -10,7 +10,6 @@ import {
   SheetTitle,
   SheetTrigger,
 } from '@/components/ui/sheet'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
@@ -79,148 +78,136 @@ const adminPages: Array<{
 <template>
   <Sheet v-if="globalStore.isAdmin" v-model:open="isOpen">
     <SheetTrigger as-child>
-      <Button size="icon" variant="destructive" class="fixed top-4 right-4 z-50">
-        <Zap class="w-4 h-4" />
+      <Button size="game-icon" variant="game-icon" class="fixed top-4 right-4 z-50 text-[#4fd4d4]">
+        <Zap class="w-5 h-5" />
       </Button>
     </SheetTrigger>
-    <SheetContent class="flex flex-col p-0">
-      <SheetHeader class="p-4 pb-2 shrink-0">
-        <SheetTitle>Admin Controls</SheetTitle>
-        <SheetDescription>
+    <SheetContent variant="game" class="flex flex-col p-0">
+      <SheetHeader class="p-4 pb-2 shrink-0 border-b border-white/10">
+        <SheetTitle class="text-white uppercase tracking-wide text-sm">Admin Controls</SheetTitle>
+        <SheetDescription class="text-white/50 text-xs">
           Administrative controls for testing and development
         </SheetDescription>
       </SheetHeader>
-      
+
       <div class="flex-1 overflow-y-auto p-4 pt-2">
         <Tabs default-value="controls" class="w-full">
-          <TabsList class="grid w-full grid-cols-2">
-            <TabsTrigger value="controls">Controls</TabsTrigger>
-            <TabsTrigger value="pages">Pages</TabsTrigger>
+          <TabsList variant="game" class="grid w-full grid-cols-2">
+            <TabsTrigger variant="game" value="controls">Controls</TabsTrigger>
+            <TabsTrigger variant="game" value="pages">Pages</TabsTrigger>
           </TabsList>
-          
+
           <TabsContent value="controls" class="mt-4">
-            <div class="space-y-4">
+            <div class="space-y-6">
               <!-- Theme Control - Only in test environments -->
-              <Card v-if="isTestEnvironment">
-                <CardHeader class="pb-3">
-                  <CardTitle class="text-lg">Theme Control</CardTitle>
-                </CardHeader>
-                <CardContent class="space-y-4">
-                  <p class="text-sm text-muted-foreground">
-                    Override the Telegram theme for testing purposes. Current: <span class="font-medium capitalize">{{ currentTheme }}</span>
-                  </p>
-                  <div class="flex flex-col gap-3">
-                    <Button 
-                      :variant="currentTheme === 'light' ? 'default' : 'outline'" 
-                      class="flex-1 flex items-center gap-2"
-                      @click="setTheme('light')"
-                    >
-                      <Sun class="w-4 h-4" />
-                      Light Theme
-                    </Button>
-                    <Button 
-                      :variant="currentTheme === 'dark' ? 'default' : 'outline'" 
-                      class="flex-1 flex items-center gap-2"
-                      @click="setTheme('dark')"
-                    >
-                      <Moon class="w-4 h-4" />
-                      Dark Theme
-                    </Button>
-                  </div>
-                </CardContent>
-              </Card>
+              <div v-if="isTestEnvironment" class="space-y-3">
+                <h3 class="text-white/70 uppercase tracking-wide text-xs font-medium">Theme Control</h3>
+                <p class="text-white/40 text-xs">
+                  Override the Telegram theme. Current: <span class="text-[#4fd4d4]">{{ currentTheme }}</span>
+                </p>
+                <div class="flex gap-3">
+                  <Button
+                    :variant="currentTheme === 'light' ? 'game-primary' : 'game-outline'"
+                    size="game-sm"
+                    class="flex-1 flex items-center gap-2"
+                    @click="setTheme('light')"
+                  >
+                    <Sun class="w-4 h-4" />
+                    Light
+                  </Button>
+                  <Button
+                    :variant="currentTheme === 'dark' ? 'game-primary' : 'game-outline'"
+                    size="game-sm"
+                    class="flex-1 flex items-center gap-2"
+                    @click="setTheme('dark')"
+                  >
+                    <Moon class="w-4 h-4" />
+                    Dark
+                  </Button>
+                </div>
+              </div>
 
               <!-- Admin Simulation -->
-              <Card>
-                <CardHeader class="pb-3">
-                  <CardTitle class="text-lg">Admin Simulation</CardTitle>
-                </CardHeader>
-                <CardContent class="space-y-4">
-                  <p class="text-sm text-muted-foreground">
-                    Simulate the non-admin user experience for testing purposes
-                  </p>
-                  <div class="flex items-center space-x-3">
-                    <Checkbox
-                      :checked="isSimulatingNonAdmin"
-                      @click="toggleAdminSimulation"
-                    />
-                    <div class="flex items-center gap-2">
-                      <Eye class="w-4 h-4" />
-                      <span class="text-sm font-medium">View as non-admin user</span>
-                    </div>
+              <div class="space-y-3 pt-4 border-t border-white/10">
+                <h3 class="text-white/70 uppercase tracking-wide text-xs font-medium">Admin Simulation</h3>
+                <p class="text-white/40 text-xs">
+                  Simulate the non-admin user experience
+                </p>
+                <div class="flex items-center space-x-3">
+                  <Checkbox
+                    variant="game"
+                    :checked="isSimulatingNonAdmin"
+                    @click="toggleAdminSimulation"
+                  />
+                  <div class="flex items-center gap-2 text-white/70">
+                    <Eye class="w-4 h-4" />
+                    <span class="text-xs">View as non-admin user</span>
                   </div>
-                  <p v-if="isSimulatingNonAdmin" class="text-xs text-orange-500">
-                    Currently viewing as non-admin. Admin controls are hidden.
-                  </p>
-                </CardContent>
-              </Card>
+                </div>
+                <p v-if="isSimulatingNonAdmin" class="text-xs text-rose-400/80">
+                  Currently viewing as non-admin. Admin controls are hidden.
+                </p>
+              </div>
 
               <!-- Global State Debug -->
-              <Card>
-                <CardHeader class="pb-3">
-                  <CardTitle class="text-lg">Global State Debug</CardTitle>
-                </CardHeader>
-                <CardContent class="space-y-3">
-                  <div class="space-y-2">
-                    <div class="text-xs font-semibold text-muted-foreground">Transfer Token:</div>
-                    <div class="bg-gray-100 dark:bg-gray-800 p-2 rounded text-xs font-mono break-all max-h-20 overflow-y-auto">
-                      {{ globalStore.transferToken || 'null' }}
-                    </div>
-                  </div>
+              <div class="space-y-3 pt-4 border-t border-white/10">
+                <h3 class="text-white/70 uppercase tracking-wide text-xs font-medium">Global State Debug</h3>
 
-                  <div class="space-y-2">
-                    <div class="text-xs font-semibold text-muted-foreground">API Token:</div>
-                    <div class="bg-gray-100 dark:bg-gray-800 p-2 rounded text-xs font-mono break-all max-h-20 overflow-y-auto">
-                      {{ globalStore.apiToken || 'null' }}
-                    </div>
+                <div class="space-y-2">
+                  <div class="text-xs text-white/40 uppercase tracking-wide">Transfer Token:</div>
+                  <div class="bg-white/5 border border-white/10 p-2 text-xs font-mono text-white/60 break-all max-h-20 overflow-y-auto">
+                    {{ globalStore.transferToken || 'null' }}
                   </div>
+                </div>
 
-                  <div class="space-y-2">
-                    <div class="text-xs font-semibold text-muted-foreground">User:</div>
-                    <div class="bg-gray-100 dark:bg-gray-800 p-2 rounded text-xs font-mono break-all max-h-32 overflow-y-auto">
-                      {{ globalStore.user ? JSON.stringify(globalStore.user, null, 2) : 'null' }}
-                    </div>
+                <div class="space-y-2">
+                  <div class="text-xs text-white/40 uppercase tracking-wide">API Token:</div>
+                  <div class="bg-white/5 border border-white/10 p-2 text-xs font-mono text-white/60 break-all max-h-20 overflow-y-auto">
+                    {{ globalStore.apiToken || 'null' }}
                   </div>
-                </CardContent>
-              </Card>
+                </div>
+
+                <div class="space-y-2">
+                  <div class="text-xs text-white/40 uppercase tracking-wide">User:</div>
+                  <div class="bg-white/5 border border-white/10 p-2 text-xs font-mono text-white/60 break-all max-h-32 overflow-y-auto">
+                    {{ globalStore.user ? JSON.stringify(globalStore.user, null, 2) : 'null' }}
+                  </div>
+                </div>
+              </div>
             </div>
           </TabsContent>
 
           <TabsContent value="pages" class="mt-4">
-            <Card>
-              <CardHeader class="pb-3">
-                <CardTitle class="text-lg">Admin Only Pages</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <p class="text-sm text-muted-foreground mb-4">
-                  Access admin-only pages and development features
-                </p>
-                <Table class="rounded-lg overflow-hidden">
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Page</TableHead>
-                      <TableHead class="w-[100px]" />
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    <TableRow v-for="page in adminPages" :key="page.name">
-                      <TableCell class="font-medium">{{ page.name }}</TableCell>
-                      <TableCell>
-                        <Button 
-                          size="sm" 
-                          variant="link"
-                          @click="page.action"
-                          class="flex items-center gap-1"
-                        >
-                          <ExternalLink class="w-3 h-3" />
-                          Open
-                        </Button>
-                      </TableCell>
-                    </TableRow>
-                  </TableBody>
-                </Table>
-              </CardContent>
-            </Card>
+            <div class="space-y-3">
+              <h3 class="text-white/70 uppercase tracking-wide text-xs font-medium">Admin Only Pages</h3>
+              <p class="text-white/40 text-xs">
+                Access admin-only pages and development features
+              </p>
+              <Table variant="game">
+                <TableHeader>
+                  <TableRow variant="game">
+                    <TableHead variant="game">Page</TableHead>
+                    <TableHead variant="game" class="w-[100px]" />
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  <TableRow variant="game" v-for="page in adminPages" :key="page.name">
+                    <TableCell variant="game" class="font-medium">{{ page.name }}</TableCell>
+                    <TableCell variant="game">
+                      <Button
+                        size="game-sm"
+                        variant="game-primary"
+                        @click="page.action"
+                        class="flex items-center gap-1"
+                      >
+                        <ExternalLink class="w-3 h-3" />
+                        Open
+                      </Button>
+                    </TableCell>
+                  </TableRow>
+                </TableBody>
+              </Table>
+            </div>
           </TabsContent>
         </Tabs>
       </div>

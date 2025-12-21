@@ -17,6 +17,7 @@ const props = defineProps<ToggleGroupItemProps & {
 }>()
 
 const context = inject<ToggleGroupVariants>("toggleGroup")
+const effectiveVariant = context?.variant || props.variant
 
 const delegatedProps = reactiveOmit(props, "class", "size", "variant")
 const forwardedProps = useForwardProps(delegatedProps)
@@ -26,15 +27,19 @@ const forwardedProps = useForwardProps(delegatedProps)
   <ToggleGroupItem
     v-slot="slotProps"
     data-slot="toggle-group-item"
-    :data-variant="context?.variant || variant"
+    :data-variant="effectiveVariant"
     :data-size="context?.size || size"
     v-bind="forwardedProps"
     :class="cn(
       toggleVariants({
-        variant: context?.variant || variant,
+        variant: effectiveVariant,
         size: context?.size || size,
       }),
-      'min-w-0 flex-1 shrink-0 shadow-none border-0 rounded-none first:rounded-l-lg last:rounded-r-lg focus:z-10 focus-visible:z-10',
+      'min-w-0 flex-1 shrink-0 shadow-none border-0 focus:z-10 focus-visible:z-10',
+      // Default variant
+      effectiveVariant !== 'game' && 'rounded-none first:rounded-l-lg last:rounded-r-lg',
+      // MV3 game variant
+      effectiveVariant === 'game' && 'rounded-none',
       props.class)"
   >
     <slot v-bind="slotProps" />

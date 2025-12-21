@@ -1,0 +1,224 @@
+import { apiRequest } from '@/utils/api'
+
+// Types
+export interface Player {
+  id: number
+  position: 'GK' | 'DEF' | 'MID' | 'ATT'
+  level: number
+  xp: number
+  energy: number
+  stamina: number
+  strength: number
+  awareness: number
+  finishing: number
+  // current_task can be:
+  // - 'training' for training
+  // - 'match' for match
+  // - 'rest:type:duration:energy' format (e.g., 'rest:full:40:0' or 'rest:short:15:0')
+  // - null when idle
+  current_task: string | null
+  task_ends_at: string | null
+}
+
+export interface Club {
+  id: number
+  user_id?: number
+  name: string
+  level: number
+  fans: number
+  created_at?: string
+  players: Player[]
+}
+
+export interface TrainingOption {
+  type: 'light' | 'balanced' | 'conditioning' | 'finishing'
+  energy_cost: number
+  xp_gain: number
+  duration: number
+  stats: Record<string, number>
+  token_cost: number
+  description: string
+}
+
+export interface RestOption {
+  type: 'short' | 'full'
+  duration: number
+  energy_gain: number
+}
+
+export interface BotMatchResult {
+  result: 'win' | 'loss' | 'draw'
+  score: { club: number; bot: number }
+  rewards: { xp: number; energy: number; fans: number }
+  players: Player[]
+}
+
+export interface LeagueClub {
+  id: number
+  name: string
+  level: number
+  fans: number
+  xp?: number
+}
+
+export interface LeagueTableEntry {
+  rank: number
+  club: LeagueClub
+  played: number
+  wins: number
+  draws: number
+  losses: number
+  goals_for: number
+  goals_against: number
+  goal_diff: number
+  points: number
+  joined_at: string
+}
+
+export interface League {
+  id: number
+  name: string
+  season: string
+}
+
+export interface LeagueMatch {
+  match_id: number
+  round: number
+  status: 'scheduled' | 'finished'
+  scheduled_at: string
+  played_at: string | null
+  home_club: LeagueClub
+  away_club: LeagueClub
+  score: { home: number | null; away: number | null }
+}
+
+export interface FeedResult {
+  processed: Array<{
+    player_id: number
+    energy_before: number
+    energy_after: number
+    cost: number
+  }>
+  errors: Array<{
+    player_id: number
+    message: string
+  }>
+  tokens_left: number
+}
+
+export interface RestResult {
+  player_id: number
+  type: 'short' | 'full'
+  duration: number
+  energy_gain: number
+  stamina_gain: number
+  task_ends_at: string
+}
+
+export interface ApiResponse<T> {
+  ok: boolean
+  data?: T
+  message?: string
+}
+
+export interface ApiErrorResponse {
+  ok: false
+  message: string
+  task?: string
+  task_ends_at?: string
+  seconds_left?: number
+  required?: number
+  current?: number
+}
+
+// Club API Service
+export const clubApi = {
+  // Create a new club
+  async createClub(name: string, token: string): Promise<ApiResponse<Club>> {
+    return apiRequest('/Club/Create', {
+      method: 'POST',
+      body: { name }
+    }, token)
+  },
+
+  // Get user's club
+  async getMyClub(token: string): Promise<ApiResponse<Club>> {
+    return apiRequest('/Club/Me', { method: 'GET' }, token)
+  },
+
+  // Update club name
+  async updateClubName(name: string, token: string): Promise<ApiResponse<Club>> {
+    return apiRequest('/Club/UpdateName', {
+      method: 'POST',
+      body: { name }
+    }, token)
+  },
+
+  // Get club players
+  async getPlayers(token: string): Promise<ApiResponse<Player[]>> {
+    return apiRequest('/Club/Players', { method: 'GET' }, token)
+  },
+
+  // Get training options
+  async getTrainingOptions(token: string): Promise<ApiResponse<TrainingOption[]>> {
+    return apiRequest('/Club/Training/Options', { method: 'GET' }, token)
+  },
+
+  // Train a player
+  async trainPlayer(
+    playerId: number,
+    type: 'light' | 'balanced' | 'conditioning' | 'finishing',
+    token: string
+  ): Promise<ApiResponse<Player>> {
+    return apiRequest('/Club/Train', {
+      method: 'POST',
+      body: { player_id: playerId, type }
+    }, token)
+  },
+
+  // Play bot match
+  async playBotMatch(token: string): Promise<ApiResponse<BotMatchResult>> {
+    return apiRequest('/Club/Match/Bot', {
+      method: 'POST',
+      body: {}
+    }, token)
+  },
+
+  // Feed players
+  async feedPlayers(playerIds: number[], token: string): Promise<ApiResponse<FeedResult>> {
+    return apiRequest('/Club/Player/Feed', {
+      method: 'POST',
+      body: { player_id: playerIds }
+    }, token)
+  },
+
+  // Rest player
+  async restPlayer(
+    playerId: number,
+    type: 'short' | 'full',
+    token: string
+  ): Promise<ApiResponse<RestResult>> {
+    return apiRequest('/Club/Player/Rest', {
+      method: 'POST',
+      body: { player_id: playerId, type }
+    }, token)
+  },
+
+  // Join league
+  async joinLeague(leagueId: number, token: string): Promise<ApiResponse<{ member_id: number; league_id: number; club_id: number }>> {
+    return apiRequest(`/Club/League/${leagueId}/Join`, {
+      method: 'POST',
+      body: {}
+    }, token)
+  },
+
+  // Get league table
+  async getLeagueTable(leagueId: number, token: string): Promise<ApiResponse<{ league: League; table: LeagueTableEntry[] }>> {
+    return apiRequest(`/Club/League/${leagueId}/Table`, { method: 'GET' }, token)
+  },
+
+  // Get league schedule
+  async getLeagueSchedule(leagueId: number, token: string): Promise<ApiResponse<{ league: League; matches: LeagueMatch[] }>> {
+    return apiRequest(`/Club/League/${leagueId}/Schedule`, { method: 'GET' }, token)
+  }
+}

@@ -17,14 +17,17 @@ defineOptions({
 })
 
 const props = withDefaults(
-  defineProps<SelectContentProps & { class?: HTMLAttributes["class"] }>(),
+  defineProps<SelectContentProps & {
+    class?: HTMLAttributes["class"]
+    variant?: 'default' | 'game'
+  }>(),
   {
     position: "popper",
   },
 )
 const emits = defineEmits<SelectContentEmits>()
 
-const delegatedProps = reactiveOmit(props, "class")
+const delegatedProps = reactiveOmit(props, "class", "variant")
 
 const forwarded = useForwardPropsEmits(delegatedProps, emits)
 </script>
@@ -35,7 +38,21 @@ const forwarded = useForwardPropsEmits(delegatedProps, emits)
       data-slot="select-content"
       v-bind="{ ...forwarded, ...$attrs }"
       :class="cn(
-        'bg-gradient-to-b from-slate-50/98 to-slate-100/98 dark:from-slate-800/98 dark:to-slate-900/98 text-slate-700 dark:text-slate-200 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 data-[side=bottom]:slide-in-from-top-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2 relative z-50 max-h-(--reka-select-content-available-height) min-w-[8rem] overflow-x-hidden overflow-y-auto border border-slate-200/50 dark:border-slate-700/50 shadow-[0_8px_32px_-8px_rgba(0,0,0,0.15)] backdrop-blur-md rounded-xl',
+        'data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 data-[side=bottom]:slide-in-from-top-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2 relative z-50 max-h-(--reka-select-content-available-height) min-w-[8rem] overflow-x-hidden overflow-y-auto',
+        // Default variant
+        props.variant !== 'game' && [
+          'bg-gradient-to-b from-slate-50/98 to-slate-100/98 dark:from-slate-800/98 dark:to-slate-900/98',
+          'text-slate-700 dark:text-slate-200',
+          'border border-slate-200/50 dark:border-slate-700/50',
+          'shadow-[0_8px_32px_-8px_rgba(0,0,0,0.15)] backdrop-blur-md rounded-xl'
+        ],
+        // MV3 game variant - dark transparent with cyan accents
+        props.variant === 'game' && [
+          'bg-[#1a1025]/95',
+          'text-white',
+          'border border-white/10',
+          'shadow-[0_8px_32px_-8px_rgba(0,0,0,0.5)] backdrop-blur-md rounded-lg'
+        ],
         position === 'popper'
           && 'data-[side=bottom]:translate-y-1 data-[side=left]:-translate-x-1 data-[side=right]:translate-x-1 data-[side=top]:-translate-y-1',
         props.class,

@@ -12,6 +12,14 @@ const router = createRouter({
       }
     },
     {
+      path: '/club',
+      name: 'club',
+      component: () => import('@/views/club/page.vue'),
+      meta: {
+        title: 'My Club - Dolphia'
+      }
+    },
+    {
       path: '/leaderboard',
       name: 'club-leaderboard',
       component: () => import('@/views/leaderboard/page.vue'),
@@ -24,7 +32,7 @@ const router = createRouter({
       name: 'club-game',
       component: () => import('@/views/game/page.vue'),
       meta: {
-        title: 'Club Management Game'
+        title: 'Club Field View'
       }
     },
     // 404 page

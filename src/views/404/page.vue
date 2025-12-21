@@ -1,29 +1,39 @@
 <script setup lang="ts">
 import { useRouter } from 'vue-router'
-import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
-import { AlertTriangle } from 'lucide-vue-next'
+import { AlertTriangle, ArrowLeft } from 'lucide-vue-next'
 
 const router = useRouter()
 
 const goHome = () => {
-	router.push('/')
+  router.push('/')
 }
 </script>
 
 <template>
-	<div class="flex flex-row justify-center bg-background mt-4">
-		<Card class="max-w-md w-full shadow-lg">
-			<CardContent class="flex flex-col items-center text-center space-y-6 py-10">
-				<AlertTriangle class="w-8 h-8 text-destructive" />
-				<div>
-					<h1 class="text-2xl font-bold">404 - Page Not Found</h1>
-					<p class="text-muted-foreground mt-2">
-						Oops! The page you are looking for doesn’t exist or has been moved.
-					</p>
-				</div>
-				<Button @click="goHome" class="mt-4">Back to Home</Button>
-			</CardContent>
-		</Card>
-	</div>
+  <div class="min-h-screen w-full bg-[#0a0812] flex items-center justify-center px-4">
+    <div class="max-w-md w-full space-y-8 text-center">
+      <!-- Icon -->
+      <div class="w-16 h-16 mx-auto border border-rose-400/30 flex items-center justify-center">
+        <AlertTriangle class="w-8 h-8 text-rose-400" />
+      </div>
+
+      <!-- Content -->
+      <div class="space-y-3">
+        <h1 class="text-white uppercase tracking-widest text-sm font-medium">404 - Page Not Found</h1>
+        <p class="text-white/40 text-sm">
+          Oops! The page you are looking for doesn't exist or has been moved.
+        </p>
+      </div>
+
+      <!-- Separator -->
+      <div class="h-[1px] w-full bg-white/10" />
+
+      <!-- Action -->
+      <Button @click="goHome" variant="game-primary" size="game" class="w-full gap-2">
+        <ArrowLeft class="w-4 h-4" />
+        Back to Home
+      </Button>
+    </div>
+  </div>
 </template>
