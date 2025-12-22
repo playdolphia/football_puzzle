@@ -363,10 +363,11 @@ export const useClubStore = defineStore('club', {
       try {
         const response = await clubApi.restPlayer(playerId, type, this.getToken())
         if (response.ok && response.data) {
-          // Update player task state
+          // Update player task state with correct format: rest:type:duration:energy
           const idx = this.players.findIndex(p => p.id === playerId)
           if (idx !== -1) {
-            this.players[idx].current_task = 'resting'
+            // Format matches backend: rest:type:duration:energy_gain
+            this.players[idx].current_task = `rest:${response.data.type}:${response.data.duration}:${response.data.energy_gain}`
             this.players[idx].task_ends_at = response.data.task_ends_at
           }
           return { ok: true, data: response.data }

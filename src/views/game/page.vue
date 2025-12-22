@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
+import { ref, computed, onMounted, onUnmounted, watch, nextTick } from 'vue'
 import { useRouter } from 'vue-router'
 import { useGlobalStore } from '@/stores'
 import { useClubStore } from '@/stores/clubStore'
@@ -552,9 +552,13 @@ const updateSpriteTexture = (
 
 // Update animations based on player states
 const updatePlayerAnimations = () => {
+  console.log('[updatePlayerAnimations] Called, processing', clubStore.players.length, 'players')
   clubStore.players.forEach((player) => {
     const sprite = animatedSprites.find(s => s.playerId === player.id)
-    if (!sprite) return
+    if (!sprite) {
+      console.log(`[updatePlayerAnimations] Player ${player.id}: No sprite found`)
+      return
+    }
 
     const prevState = previousPlayerStates.get(player.id)
 
@@ -564,6 +568,8 @@ const updatePlayerAnimations = () => {
     const playerForAnim = { ...player, current_task: effectiveTask }
 
     const animConfig = getAnimationForPlayerState(playerForAnim, 'dolphin')
+
+    console.log(`[updatePlayerAnimations] Player ${player.id}: task=${player.current_task}, effectiveTask=${effectiveTask}, spriteState=${sprite.currentAnimState}, targetState=${animConfig.state}`)
 
     // Check if a timed task just completed (had active task, now doesn't)
     // Use hasActiveTask to properly detect rest:* format tasks
@@ -810,6 +816,9 @@ const handleTrain = async (type: 'light' | 'balanced' | 'conditioning' | 'finish
     showTrainDialog.value = false
     selectedPlayer.value = null
     toast.success('Training started!')
+    // Trigger animation update after Vue processes the state change
+    await nextTick()
+    updatePlayerAnimations()
   } else {
     toast.error(result.message || 'Failed to start training')
   }
@@ -818,12 +827,17 @@ const handleTrain = async (type: 'light' | 'balanced' | 'conditioning' | 'finish
 // Trigger a quick animation for instant actions (like feeding)
 const triggerInstantAnimation = (playerId: number) => {
   const sprite = animatedSprites.find(s => s.playerId === playerId)
-  if (!sprite) return
+  if (!sprite) {
+    console.log(`[triggerInstantAnimation] No sprite found for player ${playerId}`)
+    return
+  }
 
-  // For feeding: use dolphin_feeding.png, play once forward then reverse back
+  console.log(`[triggerInstantAnimation] Triggering feeding animation for player ${playerId}`)
+
+  // For feeding: play forward, hold on last frame for 3s, then reset to idle
   const feedAnim = dolphinAnimations.find(a => a.state === 'feeding') || dolphinAnimations[0]
 
-  // Load the animation and set it to play forward then reverse
+  // Load the animation
   textureLoaderRef.load(feedAnim.path, (texture) => {
     texture.colorSpace = THREE.SRGBColorSpace
     texture.magFilter = THREE.LinearFilter
@@ -852,19 +866,34 @@ const triggerInstantAnimation = (playerId: number) => {
     sprite.currentFrame = 0
     sprite.animationComplete = false
     sprite.isReversing = false
-    sprite.holdOnLastFrame = false
+    sprite.holdOnLastFrame = true // Hold on last frame
     sprite.looping = false
-    sprite.lastFrameTime = 0
+    sprite.lastFrameTime = performance.now()
     sprite.currentAnimState = 'feeding'
 
-    // After animation plays forward, set flag to reverse
-    // This is handled by watching when animation completes forward
+    console.log(`[triggerInstantAnimation] Loaded feeding texture, will hold for 3s then reset`)
+
+    // After animation plays forward and holds for 3 seconds, reset to idle
+    const animDuration = feedAnim.frames * sprite.frameTime
+    const holdDuration = 3000 // 3 seconds
+
     setTimeout(() => {
-      if (sprite.currentAnimState === 'feeding' && sprite.currentFrame >= sprite.frameCount - 1) {
-        sprite.isReversing = true
-        sprite.animationComplete = false
+      if (sprite.currentAnimState === 'feeding') {
+        console.log(`[triggerInstantAnimation] Resetting player ${playerId} to idle after feeding`)
+        // Load idle animation
+        const idleAnim = dolphinAnimations[0]
+        updateSpriteTexture(
+          sprite,
+          idleAnim.path,
+          idleAnim.frames,
+          textureLoaderRef,
+          false, // looping
+          false, // holdOnLastFrame
+          'idle',
+          false // shouldReverse
+        )
       }
-    }, feedAnim.frames * sprite.frameTime + 100)
+    }, animDuration + holdDuration)
   })
 }
 
@@ -896,6 +925,9 @@ const handleRest = async (type: 'short' | 'full') => {
     showPlayerDialog.value = false
     selectedPlayer.value = null
     toast.success('Player is now resting!')
+    // Trigger animation update after Vue processes the state change
+    await nextTick()
+    updatePlayerAnimations()
   } else {
     toast.error(result.message || 'Failed to rest player')
   }
