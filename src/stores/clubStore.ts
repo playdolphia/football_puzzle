@@ -113,7 +113,8 @@ export const useClubStore = defineStore('club', {
         const response = await clubApi.createClub(name, this.getToken())
         if (response.ok && response.data) {
           this.club = response.data
-          this.players = response.data.players || []
+          // Normalize players to clear expired tasks
+          this.players = this.normalizeExpiredTasks(response.data.players || [])
           return { ok: true, data: response.data }
         }
         return { ok: false, message: response.message || 'Failed to create club' }
@@ -132,6 +133,30 @@ export const useClubStore = defineStore('club', {
       }
     },
 
+    // Parse task_ends_at timestamp - server returns UTC times without 'Z' suffix
+    parseTaskEndTime(taskEndsAt: string): Date {
+      // If the timestamp doesn't have timezone info, treat it as UTC
+      if (!taskEndsAt.includes('Z') && !taskEndsAt.includes('+')) {
+        return new Date(taskEndsAt.replace(' ', 'T') + 'Z')
+      }
+      return new Date(taskEndsAt)
+    },
+
+    // Normalize players - clear expired tasks to prevent animation flicker
+    normalizeExpiredTasks(players: Player[]): Player[] {
+      const now = new Date()
+      return players.map(player => {
+        if (player.task_ends_at) {
+          const endTime = this.parseTaskEndTime(player.task_ends_at)
+          if (endTime <= now) {
+            console.log(`[normalizeExpiredTasks] Clearing expired task for player ${player.id}: ${player.current_task} ended at ${player.task_ends_at} (parsed: ${endTime.toISOString()}, now: ${now.toISOString()})`)
+            return { ...player, current_task: null, task_ends_at: null }
+          }
+        }
+        return player
+      })
+    },
+
     // Fetch user's club
     async fetchClub() {
       this.loading.club = true
@@ -140,7 +165,8 @@ export const useClubStore = defineStore('club', {
         const response = await clubApi.getMyClub(this.getToken())
         if (response.ok && response.data) {
           this.club = response.data
-          this.players = response.data.players || []
+          // Normalize players to clear expired tasks
+          this.players = this.normalizeExpiredTasks(response.data.players || [])
           return { ok: true, data: response.data }
         }
         // Club not found is not an error, just means user needs to create one
@@ -189,8 +215,10 @@ export const useClubStore = defineStore('club', {
       try {
         const response = await clubApi.getPlayers(this.getToken())
         if (response.ok && response.data) {
-          this.players = response.data
-          return { ok: true, data: response.data }
+          // Normalize players to clear expired tasks
+          const normalizedPlayers = this.normalizeExpiredTasks(response.data)
+          this.players = normalizedPlayers
+          return { ok: true, data: normalizedPlayers }
         }
         return { ok: false, message: response.message || 'Failed to fetch players' }
       } catch (err: any) {
@@ -288,6 +316,12 @@ export const useClubStore = defineStore('club', {
       try {
         const response = await clubApi.feedPlayers(playerIds, this.getToken())
         if (response.ok && response.data) {
+          // Check if there are errors in the response data
+          if (response.data.errors && response.data.errors.length > 0) {
+            // Extract error message from the first error
+            const errorMsg = response.data.errors[0].message || 'Failed to feed player'
+            return { ok: false, message: errorMsg, data: response.data }
+          }
           // Update player energy in local state
           response.data.processed.forEach(result => {
             const idx = this.players.findIndex(p => p.id === result.player_id)
@@ -297,12 +331,22 @@ export const useClubStore = defineStore('club', {
           })
           return { ok: true, data: response.data }
         }
+        // Handle case where response.ok is false but data might have errors
+        if (response.data?.errors && response.data.errors.length > 0) {
+          const errorMsg = response.data.errors[0].message || 'Failed to feed player'
+          return { ok: false, message: errorMsg }
+        }
         return { ok: false, message: response.message || 'Failed to feed players' }
       } catch (err: any) {
         let message = err.message || 'Failed to feed players'
         try {
           const errorData = JSON.parse(err.message)
-          message = errorData.message || message
+          // Check for nested error structure
+          if (errorData.data?.errors && errorData.data.errors.length > 0) {
+            message = errorData.data.errors[0].message
+          } else {
+            message = errorData.message || message
+          }
           return { ok: false, message }
         } catch {
           return { ok: false, message }
@@ -355,7 +399,7 @@ export const useClubStore = defineStore('club', {
       const now = new Date()
       this.players.forEach((player, idx) => {
         if (player.task_ends_at) {
-          const endTime = new Date(player.task_ends_at)
+          const endTime = this.parseTaskEndTime(player.task_ends_at)
           if (endTime <= now) {
             // Task should be complete, clear it locally
             // Note: actual stats update should come from API refresh

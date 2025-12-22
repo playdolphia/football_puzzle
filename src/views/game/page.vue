@@ -10,11 +10,13 @@ import {
 } from '@/components/ui/dialog'
 import { ArrowLeft, Dumbbell, Utensils, Zap, Clock, Loader2, Trophy, Plus, BedDouble } from 'lucide-vue-next'
 import { Input } from '@/components/ui/input'
+import { toast } from 'vue-sonner'
 import StatBox from '@/components/layouts/StatBox.vue'
 import EnergyBar from '@/components/layouts/EnergyBar.vue'
 import PositionBadge from '@/components/layouts/PositionBadge.vue'
 import Loader from '@/components/layouts/Loader.vue'
 import * as THREE from 'three'
+import gsap from 'gsap'
 import type { Player, TrainingOption } from '@/services/clubApi'
 
 const router = useRouter()
@@ -31,8 +33,10 @@ const createError = ref('')
 const selectedPlayer = ref<Player | null>(null)
 const showPlayerDialog = ref(false)
 const showTrainDialog = ref(false)
-const actionError = ref('')
-const actionSuccess = ref('')
+
+// Reactive timer tick for countdown updates
+const timerTick = ref(0)
+let dialogTimerInterval: ReturnType<typeof setInterval> | null = null
 
 let camera: THREE.OrthographicCamera
 let renderer: THREE.WebGLRenderer
@@ -70,8 +74,10 @@ let planeHeight = 0
 // Animation options with correct frame counts
 const dolphinAnimations = [
   { name: 'Happy', path: '/sprites/dolphin_happy.png', frames: 6, state: 'idle' },
-  { name: 'Training', path: '/sprites/dolphin_training.png', frames: 8, state: 'training' },
-  { name: 'Defeated', path: '/sprites/dolphin_defeated.png', frames: 8, state: 'tired' }
+  { name: 'Training', path: '/sprites/dolphin_training.png', frames: 4, state: 'training' },
+  { name: 'Defeated', path: '/sprites/dolphin_defeated.png', frames: 12, state: 'tired' },
+  { name: 'Resting', path: '/sprites/dolphin_rest.png', frames: 4, state: 'resting' },
+  { name: 'Feeding', path: '/sprites/dolphin_feeding.png', frames: 4, state: 'feeding' }
 ]
 
 const botAnimations = [
@@ -97,8 +103,154 @@ interface AnimatedSprite {
   playerId?: number // Link to actual player
   looping: boolean // Whether animation should loop
   currentAnimState?: string // Track current animation state for change detection
+  glowMesh?: THREE.Mesh // Glow effect for match state
+  hoverOverlay?: THREE.Mesh // Dark overlay for hover state
+  isHovered: boolean // Track hover state
+  hoverOpacity: number // Current hover overlay opacity (for smooth transition)
+  targetHoverOpacity: number // Target hover overlay opacity
 }
 const animatedSprites: AnimatedSprite[] = []
+
+// Track currently hovered sprite for cursor changes
+let hoveredSprite: AnimatedSprite | null = null
+
+// Create glow texture for match state
+const createGlowTexture = (): THREE.CanvasTexture => {
+  const canvas = document.createElement('canvas')
+  const size = 256
+  canvas.width = size
+  canvas.height = size
+  const ctx = canvas.getContext('2d')!
+
+  // Create radial gradient glow - cyan/teal color matching the UI
+  const gradient = ctx.createRadialGradient(size / 2, size / 2, 0, size / 2, size / 2, size / 2)
+  gradient.addColorStop(0, 'rgba(79, 212, 212, 0.6)')   // #4fd4d4 - bright center
+  gradient.addColorStop(0.3, 'rgba(79, 212, 212, 0.3)')
+  gradient.addColorStop(0.6, 'rgba(79, 212, 212, 0.1)')
+  gradient.addColorStop(1, 'rgba(79, 212, 212, 0)')
+
+  ctx.fillStyle = gradient
+  ctx.fillRect(0, 0, size, size)
+
+  return new THREE.CanvasTexture(canvas)
+}
+
+// Add glow effect to a sprite (for match state)
+const addGlowToSprite = (sprite: AnimatedSprite) => {
+  if (sprite.glowMesh) return // Already has glow
+
+  const glowTexture = createGlowTexture()
+  const glowSize = spriteSize * 1.8 // Larger than sprite for glow effect
+  const glowGeometry = new THREE.PlaneGeometry(glowSize, glowSize)
+  const glowMaterial = new THREE.MeshBasicMaterial({
+    map: glowTexture,
+    transparent: true,
+    depthWrite: false,
+    blending: THREE.AdditiveBlending
+  })
+
+  const glowMesh = new THREE.Mesh(glowGeometry, glowMaterial)
+  glowMesh.position.set(sprite.position.x, sprite.position.y, sprite.position.z - 0.1) // Behind sprite
+  scene.add(glowMesh)
+  sprite.glowMesh = glowMesh
+}
+
+// Remove glow effect from a sprite
+const removeGlowFromSprite = (sprite: AnimatedSprite) => {
+  if (!sprite.glowMesh) return
+
+  scene.remove(sprite.glowMesh)
+  sprite.glowMesh.geometry.dispose()
+  ;(sprite.glowMesh.material as THREE.MeshBasicMaterial).dispose()
+  sprite.glowMesh = undefined
+}
+
+// Ensure hover overlay exists for a sprite (created once, opacity animated)
+const ensureHoverOverlay = (sprite: AnimatedSprite) => {
+  if (sprite.hoverOverlay) return // Already has overlay
+
+  // Clone the sprite's texture for the overlay
+  const spriteMaterial = sprite.mesh.material as THREE.MeshBasicMaterial
+  if (!spriteMaterial.map) return
+
+  const overlayTexture = spriteMaterial.map.clone()
+  overlayTexture.needsUpdate = true
+
+  // Get the sprite's current geometry dimensions
+  const spriteGeom = sprite.mesh.geometry as THREE.PlaneGeometry
+  const params = spriteGeom.parameters
+  const overlayGeometry = new THREE.PlaneGeometry(params.width, params.height)
+
+  // Use multiply blending to darken the sprite - start with 0 opacity
+  const overlayMaterial = new THREE.MeshBasicMaterial({
+    map: overlayTexture,
+    transparent: true,
+    opacity: 0,
+    depthWrite: false,
+    color: 0x333333 // Dark tint applied to texture
+  })
+
+  const overlayMesh = new THREE.Mesh(overlayGeometry, overlayMaterial)
+  overlayMesh.position.set(sprite.position.x, sprite.position.y, sprite.position.z + 0.05) // Slightly in front
+  if (sprite.flipX) {
+    overlayMesh.scale.x = -1
+  }
+  scene.add(overlayMesh)
+  sprite.hoverOverlay = overlayMesh
+}
+
+// Set target hover opacity (will animate smoothly in render loop)
+const setHoverTarget = (sprite: AnimatedSprite, hovered: boolean) => {
+  sprite.targetHoverOpacity = hovered ? 0.5 : 0
+}
+
+// Check for sprite hover (called on pointer move)
+const checkSpriteHover = (clientX: number, clientY: number) => {
+  if (!canvasContainer.value || !raycaster || !pointer) return
+
+  const rect = canvasContainer.value.getBoundingClientRect()
+  pointer.x = ((clientX - rect.left) / rect.width) * 2 - 1
+  pointer.y = -((clientY - rect.top) / rect.height) * 2 + 1
+
+  raycaster.setFromCamera(pointer, camera)
+
+  // Get all dolphin meshes that have player IDs
+  const dolphinMeshes = animatedSprites
+    .filter(s => s.team === 'dolphin' && s.playerId !== undefined)
+    .map(s => s.mesh)
+
+  const intersects = raycaster.intersectObjects(dolphinMeshes)
+
+  // Find the sprite being hovered
+  let newHoveredSprite: AnimatedSprite | null = null
+  if (intersects.length > 0) {
+    const hoveredMesh = intersects[0].object
+    newHoveredSprite = animatedSprites.find(s => s.mesh === hoveredMesh) || null
+  }
+
+  // Update hover states
+  if (newHoveredSprite !== hoveredSprite) {
+    // Fade out previous sprite
+    if (hoveredSprite) {
+      hoveredSprite.isHovered = false
+      setHoverTarget(hoveredSprite, false)
+    }
+
+    // Fade in new sprite
+    if (newHoveredSprite && newHoveredSprite.team === 'dolphin') {
+      newHoveredSprite.isHovered = true
+      ensureHoverOverlay(newHoveredSprite)
+      setHoverTarget(newHoveredSprite, true)
+    }
+
+    hoveredSprite = newHoveredSprite
+
+    // Update cursor
+    if (canvasContainer.value) {
+      canvasContainer.value.style.cursor = newHoveredSprite ? 'pointer' : 'grab'
+    }
+  }
+}
 
 // Track previous player states to detect task completion
 const previousPlayerStates = new Map<number, { task: string | null; taskEndsAt: string | null }>()
@@ -165,6 +317,22 @@ const hasActiveTask = (currentTask: string | null): boolean => {
   return currentTask === 'training' || currentTask === 'match' || isPlayerResting(currentTask)
 }
 
+// Parse task_ends_at timestamp - server returns UTC times without 'Z' suffix
+const parseTaskEndTime = (taskEndsAt: string): Date => {
+  // If the timestamp doesn't have timezone info, treat it as UTC
+  if (!taskEndsAt.includes('Z') && !taskEndsAt.includes('+')) {
+    return new Date(taskEndsAt.replace(' ', 'T') + 'Z')
+  }
+  return new Date(taskEndsAt)
+}
+
+// Check if a task has expired
+const isTaskExpiredCheck = (taskEndsAt: string | null): boolean => {
+  if (!taskEndsAt) return false
+  const endTime = parseTaskEndTime(taskEndsAt)
+  return endTime <= new Date()
+}
+
 // Get animation based on player state
 const getAnimationForPlayerState = (
   player: Player | null,
@@ -187,9 +355,8 @@ const getAnimationForPlayerState = (
 
   // Resting: current_task format is "rest:type:duration:energy" (e.g., "rest:full:40:0" or "rest:short:15:0")
   if (isPlayerResting(player.current_task)) {
-    // Resting: use defeated/tired animation (sleeping pose), hold on last frame
-    // TODO: Add dolphin_resting.png for better resting animation
-    const restAnim = anims.find(a => a.state === 'resting') || anims.find(a => a.state === 'tired') || anims[0]
+    // Resting: use dolphin_rest.png, hold on last frame
+    const restAnim = anims.find(a => a.state === 'resting') || anims[0]
     return { path: restAnim.path, frames: restAnim.frames, looping: false, holdOnLastFrame: true, state: 'resting' }
   }
 
@@ -209,6 +376,15 @@ const getAnimationForPlayerState = (
   return { path: anims[0].path, frames: anims[0].frames, looping: false, holdOnLastFrame: false, state: 'idle' }
 }
 
+// Drop animation constants
+const DROP_DISTANCE = 6 // How far above to start
+const FIELD_DROP_DURATION = 0.8
+const FIELD_DROP_DELAY = 0.2
+const CHARACTER_DROP_DELAY = FIELD_DROP_DELAY + FIELD_DROP_DURATION - 0.3 // Start slightly before field lands
+const CHARACTER_DROP_DURATION = 0.6
+const GOAL_DROP_DELAY = CHARACTER_DROP_DELAY + 0.4 // Start after some characters have landed
+const GOAL_DROP_DURATION = 0.5
+
 // Create animated sprite from sprite sheet
 const createAnimatedSprite = (
   texturePath: string,
@@ -222,7 +398,8 @@ const createAnimatedSprite = (
   looping: boolean = false,
   holdOnLastFrame: boolean = false,
   animState: AnimState = 'idle',
-  startAtLastFrame: boolean = false // When true, start at last frame (for existing tasks on page load)
+  startAtLastFrame: boolean = false, // When true, start at last frame (for existing tasks on page load)
+  dropAnimationDelay: number = 0 // Delay before drop animation starts
 ): Promise<AnimatedSprite> => {
   return new Promise((resolve) => {
     textureLoader.load(texturePath, (texture) => {
@@ -244,9 +421,6 @@ const createAnimatedSprite = (
       const startFrame = startAtLastFrame ? frameCount - 1 : 0
       texture.offset.set(startFrame * frameRatio + 0.01 * frameRatio, 0.01)
 
-      // Debug: log the start frame
-      console.log(`[createAnimatedSprite] startAtLastFrame:`, startAtLastFrame, 'startFrame:', startFrame, 'frameCount:', frameCount, 'path:', texturePath)
-
       const geometry = new THREE.PlaneGeometry(size * frameAspect, size)
       const material = new THREE.MeshBasicMaterial({
         map: texture,
@@ -255,7 +429,9 @@ const createAnimatedSprite = (
       })
 
       const mesh = new THREE.Mesh(geometry, material)
-      mesh.position.set(position.x, position.y, position.z)
+
+      // Start above final position for drop animation
+      mesh.position.set(position.x, position.y + DROP_DISTANCE, position.z)
 
       if (flipX) {
         mesh.scale.x = -1
@@ -272,13 +448,26 @@ const createAnimatedSprite = (
         team,
         position,
         flipX,
-        animationComplete: startAtLastFrame, // If starting at last frame, animation is already complete
+        // Bots should start with animation complete (stay at frame 0)
+        // Dolphins play their idle animation normally, or start complete if at last frame
+        animationComplete: team === 'bot' ? true : startAtLastFrame,
         isReversing: false,
         holdOnLastFrame,
         playerId,
         looping,
-        currentAnimState: animState
+        currentAnimState: animState,
+        isHovered: false,
+        hoverOpacity: 0,
+        targetHoverOpacity: 0
       }
+
+      // Animate drop with bounce
+      gsap.to(mesh.position, {
+        y: position.y,
+        duration: CHARACTER_DROP_DURATION,
+        ease: 'bounce.out',
+        delay: dropAnimationDelay
+      })
 
       animatedSprites.push(sprite)
       resolve(sprite)
@@ -299,13 +488,29 @@ const updateSpriteTexture = (
 ) => {
   // If we're reversing the current animation (task completed), don't load new texture
   if (shouldReverse && sprite.currentAnimState !== 'idle') {
+    console.log(`[updateSpriteTexture] Starting reverse animation from frame ${sprite.currentFrame}`)
     sprite.isReversing = true
     sprite.animationComplete = false
     sprite.holdOnLastFrame = false
     sprite.looping = false
-    // Will reverse from current frame back to 0, then switch to idle
+    // Mark as transitioning to idle so subsequent watcher triggers don't overwrite
+    // We use a special state to indicate "reversing to idle"
+    sprite.currentAnimState = 'idle' // Set to idle immediately to prevent re-triggering
+    // Will reverse from current frame back to 0, then load idle animation
     return
   }
+
+  // Set currentAnimState IMMEDIATELY to prevent race condition
+  // where watcher triggers again before texture loads
+  sprite.currentAnimState = newAnimState
+
+  // Also set holdOnLastFrame immediately so the animation logic knows what to do
+  sprite.holdOnLastFrame = holdOnLastFrame
+  sprite.looping = looping
+  sprite.animationComplete = false
+  sprite.isReversing = false
+
+  console.log(`[updateSpriteTexture] Loading ${texturePath} for state '${newAnimState}', frames: ${frameCount}, holdOnLastFrame: ${holdOnLastFrame}`)
 
   textureLoader.load(texturePath, (texture) => {
     texture.colorSpace = THREE.SRGBColorSpace
@@ -333,12 +538,15 @@ const updateSpriteTexture = (
 
     sprite.frameCount = frameCount
     sprite.currentFrame = 0
-    sprite.animationComplete = false
-    sprite.isReversing = false
-    sprite.holdOnLastFrame = holdOnLastFrame
-    sprite.looping = looping
-    sprite.lastFrameTime = 0
-    sprite.currentAnimState = newAnimState
+    // Restore normal frame time (in case it was slowed for bot random animations)
+    sprite.frameTime = 50
+    // Use performance.now() to sync with animation loop timing
+    sprite.lastFrameTime = performance.now()
+
+    // Make sprite visible again (in case it was hidden during texture swap)
+    sprite.mesh.visible = true
+
+    console.log(`[updateSpriteTexture] Texture loaded for state '${newAnimState}', starting at frame 0`)
   })
 }
 
@@ -349,12 +557,18 @@ const updatePlayerAnimations = () => {
     if (!sprite) return
 
     const prevState = previousPlayerStates.get(player.id)
-    const animConfig = getAnimationForPlayerState(player, 'dolphin')
+
+    // Check if task is expired and use effective task for animation
+    const isTaskExpired = isTaskExpiredCheck(player.task_ends_at)
+    const effectiveTask = isTaskExpired ? null : player.current_task
+    const playerForAnim = { ...player, current_task: effectiveTask }
+
+    const animConfig = getAnimationForPlayerState(playerForAnim, 'dolphin')
 
     // Check if a timed task just completed (had active task, now doesn't)
     // Use hasActiveTask to properly detect rest:* format tasks
     const hadActiveTask = prevState?.task && hasActiveTask(prevState.task)
-    const nowHasActiveTask = hasActiveTask(player.current_task)
+    const nowHasActiveTask = hasActiveTask(effectiveTask)
     const taskJustCompleted = hadActiveTask && !nowHasActiveTask
 
     // Check if this is the first time we're seeing this player (no previous state)
@@ -363,32 +577,50 @@ const updatePlayerAnimations = () => {
     if (isFirstUpdate) {
       // Just record the state for future comparisons, don't change the sprite
       previousPlayerStates.set(player.id, {
-        task: player.current_task,
-        taskEndsAt: player.task_ends_at
+        task: effectiveTask,
+        taskEndsAt: isTaskExpired ? null : player.task_ends_at
       })
       return
     }
 
-    // Update previous state tracking
+    // Update previous state tracking with effective task (respecting expiry)
     previousPlayerStates.set(player.id, {
-      task: player.current_task,
-      taskEndsAt: player.task_ends_at
+      task: effectiveTask,
+      taskEndsAt: isTaskExpired ? null : player.task_ends_at
     })
 
-    // If task just completed and sprite is holding on last frame, reverse the animation
-    if (taskJustCompleted && sprite.holdOnLastFrame && sprite.currentFrame > 0) {
-      // Start reverse animation - will go back to frame 0, then switch to idle
-      updateSpriteTexture(
-        sprite,
-        animConfig.path,
-        animConfig.frames,
-        textureLoaderRef,
-        animConfig.looping,
-        animConfig.holdOnLastFrame,
-        animConfig.state,
-        true // shouldReverse = true
-      )
+    // If task just completed, handle the transition back to idle
+    if (taskJustCompleted) {
+      // If sprite is on last frame of a holdOnLastFrame animation, reverse it
+      if (sprite.holdOnLastFrame && sprite.currentFrame > 0) {
+        console.log(`[updatePlayerAnimations] Player ${player.id}: Task completed, reversing from frame ${sprite.currentFrame}`)
+        updateSpriteTexture(
+          sprite,
+          animConfig.path,
+          animConfig.frames,
+          textureLoaderRef,
+          animConfig.looping,
+          animConfig.holdOnLastFrame,
+          animConfig.state,
+          true // shouldReverse = true
+        )
+      } else {
+        // Task completed but animation wasn't holding (or was at frame 0)
+        // Just switch to idle immediately
+        console.log(`[updatePlayerAnimations] Player ${player.id}: Task completed, switching to idle (frame was ${sprite.currentFrame}, holdOnLastFrame: ${sprite.holdOnLastFrame})`)
+        updateSpriteTexture(
+          sprite,
+          animConfig.path,
+          animConfig.frames,
+          textureLoaderRef,
+          animConfig.looping,
+          animConfig.holdOnLastFrame,
+          animConfig.state,
+          false
+        )
+      }
     } else if (sprite.currentAnimState !== animConfig.state) {
+      console.log(`[updatePlayerAnimations] Player ${player.id}: State changed from '${sprite.currentAnimState}' to '${animConfig.state}', loading new animation`)
       // Animation state changed, load new animation
       updateSpriteTexture(
         sprite,
@@ -401,8 +633,44 @@ const updatePlayerAnimations = () => {
         false
       )
     }
+
+    // Handle glow effect for match state (only if not expired)
+    if (effectiveTask === 'match') {
+      addGlowToSprite(sprite)
+    } else {
+      removeGlowFromSprite(sprite)
+    }
   })
 }
+
+// Watch for player dialog open/close to manage timer
+watch(showPlayerDialog, (isOpen) => {
+  if (isOpen && selectedPlayer.value?.current_task) {
+    startDialogTimer()
+  } else {
+    stopDialogTimer()
+  }
+})
+
+// Keep selectedPlayer in sync with store updates (for real-time task completion)
+watch(
+  () => clubStore.players,
+  (players) => {
+    if (selectedPlayer.value) {
+      const updated = players.find(p => p.id === selectedPlayer.value!.id)
+      if (updated) {
+        selectedPlayer.value = updated
+        // Start/stop timer based on task status
+        if (updated.current_task && showPlayerDialog.value) {
+          startDialogTimer()
+        } else {
+          stopDialogTimer()
+        }
+      }
+    }
+  },
+  { deep: true }
+)
 
 // Watch for player state changes
 watch(
@@ -431,9 +699,26 @@ const updateSpriteAnimation = (sprite: AnimatedSprite, time: number) => {
       if (sprite.currentFrame <= 0) {
         sprite.animationComplete = true
         sprite.isReversing = false
-        sprite.currentAnimState = 'idle'
-        // After reverse completes, we need to load the idle animation
-        // This will be handled by the next updatePlayerAnimations call
+
+        // Load idle animation now that reverse is complete
+        console.log(`[updateSpriteAnimation] Reverse complete, loading idle animation for ${sprite.team} ${sprite.playerId || ''}`)
+        const idleAnim = sprite.team === 'dolphin' ? dolphinAnimations[0] : botAnimations[0]
+        if (textureLoaderRef) {
+          // For bots, hide sprite during texture load to prevent visual glitch
+          if (sprite.team === 'bot') {
+            sprite.mesh.visible = false
+          }
+          updateSpriteTexture(
+            sprite,
+            idleAnim.path,
+            idleAnim.frames,
+            textureLoaderRef,
+            false, // looping
+            false, // holdOnLastFrame
+            'idle',
+            false  // shouldReverse
+          )
+        }
         return
       }
       sprite.currentFrame--
@@ -444,9 +729,12 @@ const updateSpriteAnimation = (sprite: AnimatedSprite, time: number) => {
           // Loop back to start
           sprite.currentFrame = 0
         } else if (sprite.holdOnLastFrame) {
-          // Hold on last frame - don't change currentFrame
+          // Hold on last frame - mark as complete but stay on this frame
+          sprite.animationComplete = true
+          console.log(`[updateSpriteAnimation] Holding on last frame ${sprite.currentFrame} of ${sprite.currentAnimState}`)
           return
         } else {
+          // Animation reached the end
           sprite.animationComplete = true
           return
         }
@@ -470,7 +758,6 @@ const handlePlayerClick = (playerId: number) => {
   if (player) {
     selectedPlayer.value = player
     showPlayerDialog.value = true
-    actionError.value = ''
   }
 }
 
@@ -507,7 +794,6 @@ const checkSpriteTap = (clientX: number, clientY: number): boolean => {
 const openTrainDialog = () => {
   showPlayerDialog.value = false
   showTrainDialog.value = true
-  actionError.value = ''
 
   if (clubStore.trainingOptions.length === 0) {
     clubStore.fetchTrainingOptions()
@@ -518,31 +804,24 @@ const openTrainDialog = () => {
 const handleTrain = async (type: 'light' | 'balanced' | 'conditioning' | 'finishing') => {
   if (!selectedPlayer.value) return
 
-  actionError.value = ''
   const result = await clubStore.trainPlayer(selectedPlayer.value.id, type)
 
   if (result.ok) {
     showTrainDialog.value = false
     selectedPlayer.value = null
-    actionSuccess.value = 'Training started!'
-    setTimeout(() => (actionSuccess.value = ''), 3000)
+    toast.success('Training started!')
   } else {
-    actionError.value = result.message || 'Failed to start training'
+    toast.error(result.message || 'Failed to start training')
   }
 }
 
 // Trigger a quick animation for instant actions (like feeding)
-const triggerInstantAnimation = (playerId: number, animType: 'feeding') => {
+const triggerInstantAnimation = (playerId: number) => {
   const sprite = animatedSprites.find(s => s.playerId === playerId)
   if (!sprite) return
 
-  // For feeding: use happy animation, play once forward then reverse back
-  // TODO: Add dolphin_eating.png for dedicated eating animation
-  const anims = dolphinAnimations
-  const feedAnim = anims.find(a => a.state === 'idle') || anims[0] // Use happy for now
-
-  // Store original state to restore after animation
-  const originalState = sprite.currentAnimState
+  // For feeding: use dolphin_feeding.png, play once forward then reverse back
+  const feedAnim = dolphinAnimations.find(a => a.state === 'feeding') || dolphinAnimations[0]
 
   // Load the animation and set it to play forward then reverse
   textureLoaderRef.load(feedAnim.path, (texture) => {
@@ -594,18 +873,16 @@ const handleFeed = async () => {
   if (!selectedPlayer.value) return
 
   const playerId = selectedPlayer.value.id
-  actionError.value = ''
   const result = await clubStore.feedPlayers([playerId])
 
   if (result.ok) {
     showPlayerDialog.value = false
     // Trigger feeding animation
-    triggerInstantAnimation(playerId, 'feeding')
+    triggerInstantAnimation(playerId)
     selectedPlayer.value = null
-    actionSuccess.value = 'Player fed!'
-    setTimeout(() => (actionSuccess.value = ''), 3000)
+    toast.success('Player fed!')
   } else {
-    actionError.value = result.message || 'Failed to feed player'
+    toast.error(result.message || 'Failed to feed player')
   }
 }
 
@@ -613,35 +890,66 @@ const handleFeed = async () => {
 const handleRest = async (type: 'short' | 'full') => {
   if (!selectedPlayer.value) return
 
-  actionError.value = ''
   const result = await clubStore.restPlayer(selectedPlayer.value.id, type)
 
   if (result.ok) {
     showPlayerDialog.value = false
     selectedPlayer.value = null
-    actionSuccess.value = 'Player is now resting!'
-    setTimeout(() => (actionSuccess.value = ''), 3000)
+    toast.success('Player is now resting!')
   } else {
-    actionError.value = result.message || 'Failed to rest player'
+    toast.error(result.message || 'Failed to rest player')
   }
 }
 
-// Format time remaining
+// Format task name for display (converts "rest:short:15:0" to "Resting")
+const formatTaskName = (task: string | null): string => {
+  if (!task) return ''
+  if (task === 'training') return 'Training'
+  if (task === 'match') return 'In Match'
+  if (task.startsWith('rest:')) return 'Resting'
+  return task.charAt(0).toUpperCase() + task.slice(1)
+}
+
+// Format time remaining (uses timerTick for reactivity)
 const formatTimeLeft = (taskEndsAt: string | null): string => {
+  // Reference timerTick to make this reactive
+  void timerTick.value
+
   if (!taskEndsAt) return ''
-  const endTime = new Date(taskEndsAt).getTime()
+  // Use parseTaskEndTime to handle UTC timestamps correctly
+  const endTime = parseTaskEndTime(taskEndsAt).getTime()
   const now = Date.now()
   const diff = endTime - now
 
   if (diff <= 0) return 'Completing...'
 
-  const minutes = Math.floor(diff / 60000)
+  const hours = Math.floor(diff / 3600000)
+  const minutes = Math.floor((diff % 3600000) / 60000)
   const seconds = Math.floor((diff % 60000) / 1000)
 
+  if (hours > 0) {
+    return `${hours}h ${minutes}m ${seconds}s`
+  }
   if (minutes > 0) {
     return `${minutes}m ${seconds}s`
   }
   return `${seconds}s`
+}
+
+// Start timer interval when dialog opens with active task
+const startDialogTimer = () => {
+  if (dialogTimerInterval) return
+  dialogTimerInterval = setInterval(() => {
+    timerTick.value++
+  }, 1000)
+}
+
+// Stop timer interval when dialog closes
+const stopDialogTimer = () => {
+  if (dialogTimerInterval) {
+    clearInterval(dialogTimerInterval)
+    dialogTimerInterval = null
+  }
 }
 
 const initScene = () => {
@@ -698,7 +1006,19 @@ const initScene = () => {
     })
     const plane = new THREE.Mesh(geometry, material)
     plane.position.z = 0
+
+    // Start field above screen for drop animation
+    const dropDistance = 8 // How far above to start
+    plane.position.y = dropDistance
     scene.add(plane)
+
+    // Animate field dropping in with bounce
+    gsap.to(plane.position, {
+      y: 0,
+      duration: 0.8,
+      ease: 'bounce.out',
+      delay: 0.2
+    })
 
     // Create cloud/fog sprites around the field
     const createCloudTexture = () => {
@@ -795,28 +1115,34 @@ const initScene = () => {
       const player = players.find(p => p.position === pos.role && !assignedPlayerIds.has(p.id))
       if (player) {
         assignedPlayerIds.add(player.id)
-        // Initialize previous state tracking
-        previousPlayerStates.set(player.id, {
-          task: player.current_task,
-          taskEndsAt: player.task_ends_at
-        })
       }
 
-      const animConfig = player
-        ? getAnimationForPlayerState(player, 'dolphin')
+      // Check if task is already expired - if so, treat as idle
+      // This prevents showing task animation briefly before reverting to idle
+      const isTaskExpired = isTaskExpiredCheck(player?.task_ends_at ?? null)
+      const effectiveTask = isTaskExpired ? null : player?.current_task
+
+      // Create a modified player object for animation config if task is expired
+      const playerForAnim = player ? { ...player, current_task: effectiveTask ?? null } : null
+
+      const animConfig = playerForAnim
+        ? getAnimationForPlayerState(playerForAnim, 'dolphin')
         : { path: dolphinAnimations[0].path, frames: dolphinAnimations[0].frames, looping: false, holdOnLastFrame: false, state: 'idle' as AnimState }
 
-      // If player already has an active task (training, resting, match), start at last frame
-      // This ensures characters show in their task pose when page loads
-      const playerHasActiveTask = player && hasActiveTask(player.current_task)
+      // If player has an active (non-expired) task, start at last frame
+      const playerHasActiveTask = playerForAnim && hasActiveTask(playerForAnim.current_task)
       const shouldStartAtLastFrame = playerHasActiveTask && animConfig.holdOnLastFrame
 
       // Debug logging
       console.log(`[Dolphin ${pos.role}] Player:`, player?.id, 'Task:', player?.current_task,
-        'hasActiveTask:', playerHasActiveTask, 'holdOnLastFrame:', animConfig.holdOnLastFrame,
-        'shouldStartAtLastFrame:', shouldStartAtLastFrame, 'animState:', animConfig.state)
+        'isExpired:', isTaskExpired, 'effectiveTask:', effectiveTask,
+        'hasActiveTask:', playerHasActiveTask, 'shouldStartAtLastFrame:', shouldStartAtLastFrame)
 
-      await createAnimatedSprite(
+      // Calculate staggered drop delay for this dolphin
+      const dolphinIndex = dolphinPositions.indexOf(pos)
+      const dolphinDropDelay = CHARACTER_DROP_DELAY + (dolphinIndex * 0.08)
+
+      const dolphinSprite = await createAnimatedSprite(
         animConfig.path,
         animConfig.frames,
         { x: pos.x, y: pos.y, z: pos.z },
@@ -828,12 +1154,31 @@ const initScene = () => {
         animConfig.looping,
         animConfig.holdOnLastFrame,
         animConfig.state,
-        shouldStartAtLastFrame // Start at last frame if player already has active task
+        shouldStartAtLastFrame || false,
+        dolphinDropDelay
       )
+
+      // Initialize previousPlayerStates with the EFFECTIVE task (null if expired)
+      // This prevents false "task completed" detection
+      if (player) {
+        previousPlayerStates.set(player.id, {
+          task: effectiveTask ?? null,
+          taskEndsAt: isTaskExpired ? null : player.task_ends_at
+        })
+      }
+
+      // Add glow effect if player is in match state (only if not expired)
+      if (effectiveTask === 'match') {
+        addGlowToSprite(dolphinSprite)
+      }
     }
 
-    // Create bots on right side
-    for (const pos of botPositions) {
+    // Create bots on right side with staggered drop animation
+    for (let botIndex = 0; botIndex < botPositions.length; botIndex++) {
+      const pos = botPositions[botIndex]
+      // Bots start dropping slightly after dolphins
+      const botDropDelay = CHARACTER_DROP_DELAY + 0.2 + (botIndex * 0.08)
+
       await createAnimatedSprite(
         botAnimations[0].path,
         botAnimations[0].frames,
@@ -843,12 +1188,16 @@ const initScene = () => {
         false,
         'bot',
         undefined,
-        false
+        false,
+        false,
+        'idle',
+        false,
+        botDropDelay
       )
     }
 
-    // Load goal images (z=2 to appear in front of players)
-    const loadGoal = (path: string, x: number, y: number, height: number) => {
+    // Load goal images (z=2 to appear in front of players) with drop animation
+    const loadGoal = (path: string, x: number, y: number, height: number, dropDelay: number) => {
       textureLoaderRef.load(path, (goalTexture) => {
         goalTexture.colorSpace = THREE.SRGBColorSpace
         const goalAspect = goalTexture.image.width / goalTexture.image.height
@@ -859,15 +1208,104 @@ const initScene = () => {
           transparent: true
         })
         const goalMesh = new THREE.Mesh(goalGeometry, goalMaterial)
-        goalMesh.position.set(x, y, 2)
+        // Start above final position for drop animation
+        goalMesh.position.set(x, y + DROP_DISTANCE, 2)
         scene.add(goalMesh)
+
+        // Animate drop with bounce
+        gsap.to(goalMesh.position, {
+          y: y,
+          duration: GOAL_DROP_DURATION,
+          ease: 'bounce.out',
+          delay: dropDelay
+        })
       })
     }
 
     // Left goal (dolphin side) - adjusted position and scale
-    loadGoal('/scene/left-goal.webp', -2.15, -0.2, 2)
-    // Right goal (bot side) - adjusted position and scale
-    loadGoal('/scene/right-goal.webp', 2.4, 2.5, 2)
+    loadGoal('/scene/left-goal.webp', -2.15, -0.2, 2, GOAL_DROP_DELAY)
+    // Right goal (bot side) - adjusted position and scale with slight stagger
+    loadGoal('/scene/right-goal.webp', 2.4, 2.5, 2, GOAL_DROP_DELAY + 0.15)
+
+    // ========== DECORATIVE ELEMENTS (Clouds, Cubes, Geometries) ==========
+    // Positions based on screenshot reference (scaled to match Three.js world coordinates)
+    // These elements are placed around the field edges for visual appeal
+
+    interface DecorativeElement {
+      mesh: THREE.Mesh
+      type: 'cloud' | 'geometry'
+      baseX: number
+      baseY: number
+    }
+    const decorativeElements: DecorativeElement[] = []
+
+    // Load decorative sprite helper
+    const loadDecorativeSprite = (
+      path: string,
+      x: number,
+      y: number,
+      z: number,
+      height: number,
+      type: 'cloud' | 'geometry',
+      fadeDelay: number
+    ) => {
+      textureLoaderRef.load(path, (tex) => {
+        tex.colorSpace = THREE.SRGBColorSpace
+        const aspect = tex.image.width / tex.image.height
+        const width = height * aspect
+        const geometry = new THREE.PlaneGeometry(width, height)
+        const material = new THREE.MeshBasicMaterial({
+          map: tex,
+          transparent: true,
+          opacity: 0, // Start invisible for fade-in
+          depthWrite: false
+        })
+        const mesh = new THREE.Mesh(geometry, material)
+        mesh.position.set(x, y, z)
+        scene.add(mesh)
+
+        // Store for animation
+        decorativeElements.push({ mesh, type, baseX: x, baseY: y })
+
+        // Fade-in animation with GSAP
+        gsap.to(material, {
+          opacity: 1,
+          duration: 1.2,
+          ease: 'power2.out',
+          delay: fadeDelay
+        })
+      })
+    }
+
+    // Timing for decorative elements (after goals drop)
+    const DECOR_FADE_START = GOAL_DROP_DELAY + GOAL_DROP_DURATION
+
+    // === CLOUDS (4 corners) - z=5 to be on top of everything ===
+    // Top-left cloud - large, positioned at upper left
+    loadDecorativeSprite('/scene/top-left-cloud.webp', -3.8, 2.8, 5, 2.5, 'cloud', DECOR_FADE_START)
+    // Top-right cloud - smaller, positioned at upper right
+    loadDecorativeSprite('/scene/top-right-cloud.webp', 3.5, 3.2, 5, 1.5, 'cloud', DECOR_FADE_START + 0.1)
+    // Bottom-left cloud - medium, positioned at lower left
+    loadDecorativeSprite('/scene/bottom-left-cloud.webp', -3.5, -2.5, 5, 2.0, 'cloud', DECOR_FADE_START + 0.2)
+    // Bottom-right cloud - large, positioned at lower right
+    loadDecorativeSprite('/scene/bottom-right-cloud.webp', 3.2, -2.2, 5, 2.2, 'cloud', DECOR_FADE_START + 0.3)
+
+    // === GEOMETRIC SHAPES (cubes, pyramid, etc.) - z=4 to be on top ===
+    // Green quarter-ball - top area
+    loadDecorativeSprite('/scene/green-quarter-ball.webp', 1.5, 3.5, 4, 0.6, 'geometry', DECOR_FADE_START + 0.15)
+    // Orange cube - left side
+    loadDecorativeSprite('/scene/orange-cube.webp', -4.2, 1.5, 4, 0.5, 'geometry', DECOR_FADE_START + 0.25)
+    // Pink circle - right side
+    loadDecorativeSprite('/scene/pink-circle.webp', 4.0, 1.2, 4, 0.35, 'geometry', DECOR_FADE_START + 0.35)
+    // Green cube - right side lower
+    loadDecorativeSprite('/scene/green-cube.webp', 4.2, 0.2, 4, 0.6, 'geometry', DECOR_FADE_START + 0.45)
+    // Purple pyramid - left side lower
+    loadDecorativeSprite('/scene/purple-pyramid.webp', -3.0, -1.0, 4, 0.7, 'geometry', DECOR_FADE_START + 0.4)
+    // Purple cube - bottom right
+    loadDecorativeSprite('/scene/purple-cube.webp', 3.8, -3.0, 4, 0.5, 'geometry', DECOR_FADE_START + 0.5)
+
+    // Store decorative elements for animation loop
+    ;(window as any).__decorativeElements = decorativeElements
 
     // Mark scene as initialized - now watch can update animations
     isSceneInitialized = true
@@ -912,6 +1350,9 @@ const initScene = () => {
   }
 
   const handlePointerMove = (e: PointerEvent) => {
+    // Always check hover for cursor and overlay, even when not panning
+    checkSpriteHover(e.clientX, e.clientY)
+
     if (!isPanning) return
 
     const deltaX = e.clientX - startX
@@ -1043,6 +1484,72 @@ const initScene = () => {
       })
     }
 
+    // Animate glow meshes for match state dolphins - pulsing effect
+    // Also animate hover overlay opacity for smooth transitions
+    animatedSprites.forEach((sprite) => {
+      // Glow animation
+      if (sprite.glowMesh) {
+        const glowMat = sprite.glowMesh.material as THREE.MeshBasicMaterial
+        // Pulse opacity between 0.4 and 1.0
+        glowMat.opacity = 0.7 + Math.sin(time * 0.003) * 0.3
+        // Subtle scale pulse
+        const scale = 1 + Math.sin(time * 0.002) * 0.1
+        sprite.glowMesh.scale.set(scale, scale, 1)
+      }
+
+      // Smooth hover overlay opacity transition
+      if (sprite.hoverOverlay) {
+        const lerpSpeed = 0.15 // Adjust for faster/slower transition
+        sprite.hoverOpacity += (sprite.targetHoverOpacity - sprite.hoverOpacity) * lerpSpeed
+
+        // Clamp very small values to 0 to avoid floating point issues
+        if (Math.abs(sprite.hoverOpacity) < 0.001) {
+          sprite.hoverOpacity = 0
+        }
+
+        const overlayMat = sprite.hoverOverlay.material as THREE.MeshBasicMaterial
+        overlayMat.opacity = sprite.hoverOpacity
+      }
+    })
+
+    // Animate decorative elements (clouds slide in isometric direction, geometries float)
+    const decorElements = (window as any).__decorativeElements as Array<{
+      mesh: THREE.Mesh
+      type: 'cloud' | 'geometry'
+      baseX: number
+      baseY: number
+    }> | undefined
+
+    if (decorElements) {
+      decorElements.forEach((elem, index) => {
+        const t = time * 0.001 // Convert to seconds for smoother control
+
+        if (elem.type === 'cloud') {
+          // Clouds: sliding in isometric direction (diagonal movement)
+          const slideSpeed = 0.15 + index * 0.02
+          const slideAmplitude = 0.3 + index * 0.05
+          // Isometric sliding: move diagonally
+          elem.mesh.position.x = elem.baseX + Math.sin(t * slideSpeed) * slideAmplitude
+          elem.mesh.position.y = elem.baseY + Math.cos(t * slideSpeed) * slideAmplitude * 0.5
+        } else {
+          // Geometries: ultra-smooth floating with gentle bob
+          // Very slow speed for peaceful, hypnotic movement
+          const floatSpeed = 0.4 + index * 0.08 // Slower base speed
+          const floatAmplitude = 0.06 + index * 0.015
+          // Smooth sine wave with secondary harmonic for organic motion
+          const primaryWave = Math.sin(t * floatSpeed)
+          const secondaryWave = Math.sin(t * floatSpeed * 2.1) * 0.15 // Subtle secondary motion
+          const combinedWave = primaryWave + secondaryWave
+          // Floating motion - primarily vertical with very subtle horizontal sway
+          elem.mesh.position.y = elem.baseY + combinedWave * floatAmplitude
+          elem.mesh.position.x = elem.baseX + Math.sin(t * floatSpeed * 0.5) * floatAmplitude * 0.2
+          // Very subtle scale breathing
+          const scaleBreath = 1 + Math.sin(t * floatSpeed * 0.3) * 0.015
+          elem.mesh.scale.set(scaleBreath, scaleBreath, 1)
+        }
+      })
+    }
+
     renderer.render(scene, camera)
   }
   animate(0)
@@ -1058,6 +1565,158 @@ const initScene = () => {
 
 // Task completion check interval
 let taskCheckInterval: ReturnType<typeof setInterval> | null = null
+let playerSyncInterval: ReturnType<typeof setInterval> | null = null
+let botRandomAnimInterval: ReturnType<typeof setInterval> | null = null
+const PLAYER_SYNC_INTERVAL = 30000 // Sync player state every 30 seconds
+const BOT_RANDOM_ANIM_MIN = 2 * 60 * 1000 // 2 minutes minimum
+const BOT_RANDOM_ANIM_MAX = 3 * 60 * 1000 // 3 minutes maximum
+const BOT_STATE_DURATION = 15 * 1000 // 15 seconds for testing (should be 15 * 60 * 1000 for production)
+
+// Trigger a random animation on a random bot
+const triggerRandomBotAnimation = () => {
+  // Get all bot sprites
+  const botSprites = animatedSprites.filter(s => s.team === 'bot')
+  if (botSprites.length === 0 || !textureLoaderRef) return
+
+  // Pick a random bot that is currently in idle state
+  // Skip bots that are already showing a random state or are currently animating
+  // The __holdingRandomState flag indicates bot is holding on last frame of a random animation
+  const availableBots = botSprites.filter(bot => {
+    const hasResetTimer = !!(bot as any).__resetToIdleTimer
+    const isHoldingRandomState = !!(bot as any).__holdingRandomState
+    const isAnimating = !bot.animationComplete
+    const isInRandomState = hasResetTimer || isHoldingRandomState
+
+    // Bot is available if: in idle state, not animating, and not showing a random state
+    const available = !isInRandomState && !isAnimating && bot.currentAnimState === 'idle'
+    console.log(`[Bot Filter] state=${bot.currentAnimState} animComplete=${bot.animationComplete} hasTimer=${hasResetTimer} holdingState=${isHoldingRandomState} => available=${available}`)
+    return available
+  })
+
+  if (availableBots.length === 0) {
+    console.log(`[Bot Random Anim] No available bots (all busy or in random state)`)
+    return
+  }
+
+  const randomBot = availableBots[Math.floor(Math.random() * availableBots.length)]
+
+  // Pick a random animation (excluding idle which is index 0)
+  const nonIdleAnims = botAnimations.slice(1) // training, tired, defeated
+  const randomAnim = nonIdleAnims[Math.floor(Math.random() * nonIdleAnims.length)]
+
+  console.log(`[Bot Random Anim] Triggering ${randomAnim.name} animation on bot`)
+
+  // Hide bot during texture load to prevent visual glitch
+  randomBot.mesh.visible = false
+
+  // Load the new animation texture
+  textureLoaderRef.load(randomAnim.path, (texture) => {
+    texture.colorSpace = THREE.SRGBColorSpace
+    texture.magFilter = THREE.LinearFilter
+    texture.minFilter = THREE.LinearFilter
+    texture.wrapS = THREE.ClampToEdgeWrapping
+    texture.wrapT = THREE.ClampToEdgeWrapping
+
+    const sheetWidth = texture.image.width
+    const sheetHeight = texture.image.height
+    const frameWidth = sheetWidth / randomAnim.frames
+    const frameAspect = frameWidth / sheetHeight
+
+    const frameRatio = 1 / randomAnim.frames
+    texture.repeat.set(frameRatio * 0.98, 0.98)
+    texture.offset.set(0.01 * frameRatio, 0.01)
+
+    const material = randomBot.mesh.material as THREE.MeshBasicMaterial
+    material.map?.dispose()
+    material.map = texture
+    material.needsUpdate = true
+
+    randomBot.mesh.geometry.dispose()
+    randomBot.mesh.geometry = new THREE.PlaneGeometry(spriteSize * frameAspect, spriteSize)
+
+    // Set up animation state
+    randomBot.frameCount = randomAnim.frames
+    randomBot.currentFrame = 0
+    randomBot.animationComplete = false
+    randomBot.isReversing = false
+    randomBot.holdOnLastFrame = true  // Hold on last frame instead of reversing
+    randomBot.looping = false
+    randomBot.frameTime = 50
+    // Use performance.now() to sync with animation loop timing
+    // This prevents all frames from advancing instantly due to large time delta
+    randomBot.lastFrameTime = performance.now()
+    randomBot.currentAnimState = randomAnim.state
+
+    // Mark that this bot is showing a random state (will hold on last frame)
+    ;(randomBot as any).__holdingRandomState = true
+
+    // Clear any existing reset timer for this bot
+    if ((randomBot as any).__resetToIdleTimer) {
+      clearTimeout((randomBot as any).__resetToIdleTimer)
+    }
+
+    // Schedule reset to idle after 15 minutes
+    ;(randomBot as any).__resetToIdleTimer = setTimeout(() => {
+      console.log(`[Bot Random Anim] 15 minutes passed, resetting bot to idle (aggressive)`)
+      if (!textureLoaderRef) return
+
+      // Hide during texture load
+      randomBot.mesh.visible = false
+
+      // Load idle (aggressive) animation
+      const idleAnim = botAnimations[0]
+      textureLoaderRef.load(idleAnim.path, (idleTexture) => {
+        idleTexture.colorSpace = THREE.SRGBColorSpace
+        idleTexture.magFilter = THREE.LinearFilter
+        idleTexture.minFilter = THREE.LinearFilter
+        idleTexture.wrapS = THREE.ClampToEdgeWrapping
+        idleTexture.wrapT = THREE.ClampToEdgeWrapping
+
+        const idleSheetWidth = idleTexture.image.width
+        const idleSheetHeight = idleTexture.image.height
+        const idleFrameWidth = idleSheetWidth / idleAnim.frames
+        const idleFrameAspect = idleFrameWidth / idleSheetHeight
+
+        const idleFrameRatio = 1 / idleAnim.frames
+        idleTexture.repeat.set(idleFrameRatio * 0.98, 0.98)
+        idleTexture.offset.set(0.01 * idleFrameRatio, 0.01)
+
+        const idleMaterial = randomBot.mesh.material as THREE.MeshBasicMaterial
+        idleMaterial.map?.dispose()
+        idleMaterial.map = idleTexture
+        idleMaterial.needsUpdate = true
+
+        randomBot.mesh.geometry.dispose()
+        randomBot.mesh.geometry = new THREE.PlaneGeometry(spriteSize * idleFrameAspect, spriteSize)
+
+        randomBot.frameCount = idleAnim.frames
+        randomBot.currentFrame = 0
+        randomBot.animationComplete = true
+        randomBot.currentAnimState = 'idle'
+        randomBot.lastFrameTime = performance.now()
+
+        randomBot.mesh.visible = true
+        // Clean up both flags
+        delete (randomBot as any).__holdingRandomState
+        delete (randomBot as any).__resetToIdleTimer
+      })
+    }, BOT_STATE_DURATION)
+
+    // Make bot visible now that new texture is loaded
+    randomBot.mesh.visible = true
+
+    console.log(`[Bot Random Anim] ${randomAnim.name} texture loaded, will play forward and hold on last frame for ${BOT_STATE_DURATION / 1000}s`)
+  })
+}
+
+// Schedule next random bot animation with random delay between 2-3 minutes
+const scheduleNextBotAnimation = () => {
+  const delay = BOT_RANDOM_ANIM_MIN + Math.random() * (BOT_RANDOM_ANIM_MAX - BOT_RANDOM_ANIM_MIN)
+  botRandomAnimInterval = setTimeout(() => {
+    triggerRandomBotAnimation()
+    scheduleNextBotAnimation() // Schedule next one
+  }, delay)
+}
 
 onMounted(async () => {
   // Ensure club data is loaded
@@ -1078,10 +1737,18 @@ onMounted(async () => {
   // Initialize scene
   initScene()
 
-  // Set up task completion checker
+  // Set up task completion checker (runs every second for local task expiry)
   taskCheckInterval = setInterval(() => {
     clubStore.checkCompletedTasks()
   }, 1000)
+
+  // Set up player sync interval (fetches fresh player data from backend)
+  playerSyncInterval = setInterval(async () => {
+    await clubStore.fetchPlayers()
+  }, PLAYER_SYNC_INTERVAL)
+
+  // Start random bot animation scheduler
+  scheduleNextBotAnimation()
 })
 
 onUnmounted(() => {
@@ -1094,6 +1761,20 @@ onUnmounted(() => {
   if (taskCheckInterval) {
     clearInterval(taskCheckInterval)
   }
+  if (playerSyncInterval) {
+    clearInterval(playerSyncInterval)
+  }
+  if (botRandomAnimInterval) {
+    clearTimeout(botRandomAnimInterval)
+  }
+  // Clean up bot reset timers
+  animatedSprites.filter(s => s.team === 'bot').forEach(bot => {
+    if ((bot as any).__resetToIdleTimer) {
+      clearTimeout((bot as any).__resetToIdleTimer)
+    }
+  })
+  // Clean up dialog timer
+  stopDialogTimer()
 })
 
 // Computed: club info for header
@@ -1205,11 +1886,6 @@ const clubInfo = computed(() => ({
       </div>
     </div>
 
-    <!-- Success message - MV3 Style -->
-    <div v-if="actionSuccess" class="absolute top-4 left-1/2 -translate-x-1/2 z-30 px-4 py-2 border border-[#4fd4d4]/30 bg-[#4fd4d4]/10 text-[#4fd4d4] text-xs tracking-wide uppercase">
-      {{ actionSuccess }}
-    </div>
-
     <!-- Hint text - MV3 Style -->
     <div v-if="!isInitializing && !needsClubCreation && clubStore.hasClub" class="absolute bottom-6 left-1/2 -translate-x-1/2 z-20">
       <div class="border border-white/10 text-white/40 text-[10px] tracking-wider uppercase px-4 py-2">
@@ -1223,7 +1899,6 @@ const clubInfo = computed(() => ({
       class="w-full h-screen cursor-grab active:cursor-grabbing"
       style="touch-action: none"
     ></div>
-
 
     <!-- Player Dialog - Monument Valley 3 Style -->
     <Dialog v-model:open="showPlayerDialog">
@@ -1256,16 +1931,23 @@ const clubInfo = computed(() => ({
           <!-- Horizontal line separator -->
           <div class="h-[1px] w-full bg-white/10" />
 
-          <!-- Current Task -->
-          <div v-if="selectedPlayer.current_task" class="flex items-center justify-center gap-3">
-            <Clock class="w-4 h-4 text-[#4fd4d4] animate-pulse" />
-            <span class="capitalize text-white/70 text-sm tracking-wide">{{ selectedPlayer.current_task }}</span>
-            <span class="text-sm text-[#4fd4d4]">
-              {{ formatTimeLeft(selectedPlayer.task_ends_at) }}
-            </span>
+          <!-- Current Task with Live Timer (only show if task is not expired) -->
+          <div v-if="selectedPlayer.current_task && !isTaskExpiredCheck(selectedPlayer.task_ends_at)" class="space-y-3">
+            <div class="flex items-center justify-center gap-3">
+              <Clock class="w-4 h-4 text-[#4fd4d4] animate-pulse" />
+              <span class="text-white/70 text-sm tracking-wide">{{ formatTaskName(selectedPlayer.current_task) }}</span>
+            </div>
+            <div class="text-center">
+              <span class="text-2xl font-light text-[#4fd4d4] tracking-wider">
+                {{ formatTimeLeft(selectedPlayer.task_ends_at) }}
+              </span>
+            </div>
+            <p class="text-xs text-white/30 tracking-wide">
+              Player will be available when task completes
+            </p>
           </div>
 
-          <!-- Action Buttons - MV3 Style -->
+          <!-- Action Buttons - MV3 Style (show if no task or task is expired) -->
           <div v-else class="flex items-center justify-center gap-8 py-2">
             <Button @click="openTrainDialog" variant="game-primary" size="game" class="flex-col gap-1">
               <Dumbbell class="w-5 h-5" />
@@ -1282,9 +1964,6 @@ const clubInfo = computed(() => ({
               <span class="text-[10px]">Rest</span>
             </Button>
           </div>
-
-          <!-- Error message -->
-          <p v-if="actionError" class="text-sm text-rose-400">{{ actionError }}</p>
         </div>
       </DialogContent>
     </Dialog>
@@ -1330,8 +2009,6 @@ const clubInfo = computed(() => ({
               </div>
             </div>
           </div>
-
-          <p v-if="actionError" class="text-sm text-rose-400">{{ actionError }}</p>
 
           <!-- Horizontal line separator -->
           <div class="h-[1px] w-full bg-white/10" />

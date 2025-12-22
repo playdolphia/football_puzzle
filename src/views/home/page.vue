@@ -141,9 +141,9 @@ onMounted(async () => {
 
 <template>
   <div class="min-h-screen bg-[#0a0812] relative">
-    <!-- Background Image with 70% transparency -->
+    <!-- Background Image with 70% transparency and subtle blur -->
     <div
-      class="absolute inset-0 bg-cover bg-center bg-no-repeat opacity-15"
+      class="absolute inset-0 bg-cover bg-center bg-no-repeat opacity-15 blur-[1px]"
       style="background-image: url('/bg.webp');"
     ></div>
 

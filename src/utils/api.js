@@ -48,5 +48,9 @@ export async function apiRequest(endpoint, { method = 'GET', headers = {}, body 
     throw error;
   }
 
-  return response.json();
+  const data = await response.json();
+
+  // If the API returns ok: false in the body (even with HTTP 200), return it as-is
+  // so the caller can handle the error structure properly
+  return data;
 }
