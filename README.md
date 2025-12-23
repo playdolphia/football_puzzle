@@ -1,1 +1,1 @@
-# Dolphia Club Management Game
+# Dolphia Club Management
