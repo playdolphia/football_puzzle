@@ -8,7 +8,7 @@ import {
   Dialog,
   DialogContent
 } from '@/components/ui/dialog'
-import { ArrowLeft, Dumbbell, Utensils, Zap, Clock, Loader2, Trophy, Plus, BedDouble } from 'lucide-vue-next'
+import { ArrowLeft, Dumbbell, Utensils, Zap, Clock, Loader2, Trophy, Plus, BedDouble, Pencil } from 'lucide-vue-next'
 import { Input } from '@/components/ui/input'
 import { toast } from 'vue-sonner'
 import StatBox from '@/components/layouts/StatBox.vue'
@@ -33,6 +33,9 @@ const createError = ref('')
 const selectedPlayer = ref<Player | null>(null)
 const showPlayerDialog = ref(false)
 const showTrainDialog = ref(false)
+const showRestDialog = ref(false)
+const showRenameDialog = ref(false)
+const newClubName = ref('')
 
 // Reactive timer tick for countdown updates
 const timerTick = ref(0)
@@ -301,6 +304,29 @@ const handleCreateClub = async () => {
     initScene()
   } else {
     createError.value = result.message || 'Failed to create club'
+  }
+}
+
+// Open rename dialog
+const openRenameDialog = () => {
+  newClubName.value = clubStore.clubName
+  showRenameDialog.value = true
+}
+
+// Handle rename club
+const handleRenameClub = async () => {
+  if (!newClubName.value.trim()) {
+    toast.error('Please enter a club name')
+    return
+  }
+
+  const result = await clubStore.updateClubName(newClubName.value.trim())
+
+  if (result.ok) {
+    showRenameDialog.value = false
+    toast.success('Club name updated!')
+  } else {
+    toast.error(result.message || 'Failed to update club name')
   }
 }
 
@@ -678,6 +704,62 @@ watch(
   { deep: true }
 )
 
+// Track if bots are currently visible (for match animation)
+let botsVisible = false
+let botHideTimeout: ReturnType<typeof setTimeout> | null = null
+
+// Show bots with drop animation
+const showBotsWithAnimation = () => {
+  if (botsVisible) return
+  botsVisible = true
+
+  animatedSprites
+    .filter(s => s.team === 'bot')
+    .forEach((bot, index) => {
+      // Make visible and position above
+      bot.mesh.visible = true
+      bot.mesh.position.y = bot.position.y + DROP_DISTANCE
+
+      // Animate drop with staggered delay
+      gsap.to(bot.mesh.position, {
+        y: bot.position.y,
+        duration: CHARACTER_DROP_DURATION,
+        ease: 'bounce.out',
+        delay: index * 0.08
+      })
+    })
+}
+
+// Hide bots with reverse animation (go back up)
+const hideBotsWithAnimation = () => {
+  if (!botsVisible) return
+  botsVisible = false
+
+  animatedSprites
+    .filter(s => s.team === 'bot')
+    .forEach((bot, index) => {
+      // Animate going back up
+      gsap.to(bot.mesh.position, {
+        y: bot.position.y + DROP_DISTANCE,
+        duration: 0.5,
+        ease: 'power2.in',
+        delay: index * 0.05,
+        onComplete: () => {
+          bot.mesh.visible = false
+        }
+      })
+    })
+}
+
+// Hide bots initially (they show only during match)
+const hideBots = () => {
+  animatedSprites
+    .filter(s => s.team === 'bot')
+    .forEach(bot => {
+      bot.mesh.visible = false
+    })
+}
+
 // Watch for player state changes
 watch(
   () => clubStore.players.map(p => `${p.id}-${p.current_task}-${p.energy}`).join(','),
@@ -915,6 +997,12 @@ const handleFeed = async () => {
   }
 }
 
+// Open rest dialog
+const openRestDialog = () => {
+  showPlayerDialog.value = false
+  showRestDialog.value = true
+}
+
 // Rest player
 const handleRest = async (type: 'short' | 'full') => {
   if (!selectedPlayer.value) return
@@ -922,7 +1010,7 @@ const handleRest = async (type: 'short' | 'full') => {
   const result = await clubStore.restPlayer(selectedPlayer.value.id, type)
 
   if (result.ok) {
-    showPlayerDialog.value = false
+    showRestDialog.value = false
     selectedPlayer.value = null
     toast.success('Player is now resting!')
     // Trigger animation update after Vue processes the state change
@@ -930,6 +1018,44 @@ const handleRest = async (type: 'short' | 'full') => {
     updatePlayerAnimations()
   } else {
     toast.error(result.message || 'Failed to rest player')
+  }
+}
+
+// Play bot match
+const handlePlayBotMatch = async () => {
+  // Clear any pending hide timeout
+  if (botHideTimeout) {
+    clearTimeout(botHideTimeout)
+    botHideTimeout = null
+  }
+
+  // Show bots with drop animation
+  showBotsWithAnimation()
+
+  const result = await clubStore.playBotMatch()
+
+  if (result.ok && result.data) {
+    const matchResult = result.data
+    // Show match result
+    if (matchResult.result === 'win') {
+      toast.success(`Victory! ${matchResult.score.club} - ${matchResult.score.bot}`)
+    } else if (matchResult.result === 'loss') {
+      toast.error(`Defeat! ${matchResult.score.club} - ${matchResult.score.bot}`)
+    } else {
+      toast.info(`Draw! ${matchResult.score.club} - ${matchResult.score.bot}`)
+    }
+    // Trigger animation update
+    await nextTick()
+    updatePlayerAnimations()
+
+    // Hide bots after 10 seconds with reverse animation
+    botHideTimeout = setTimeout(() => {
+      hideBotsWithAnimation()
+    }, 10000)
+  } else {
+    toast.error(result.message || 'Failed to start match')
+    // Hide bots immediately on error
+    hideBotsWithAnimation()
   }
 }
 
@@ -1227,6 +1353,9 @@ const initScene = () => {
         botDropDelay
       )
     }
+
+    // Hide bots initially (they only show during match)
+    hideBots()
 
     // Load goal images (z=2 to appear in front of players) with drop animation
     const loadGoal = (path: string, x: number, y: number, height: number, dropDelay: number) => {
@@ -1799,6 +1928,9 @@ onUnmounted(() => {
   if (botRandomAnimInterval) {
     clearTimeout(botRandomAnimInterval)
   }
+  if (botHideTimeout) {
+    clearTimeout(botHideTimeout)
+  }
   // Clean up bot reset timers
   animatedSprites.filter(s => s.team === 'bot').forEach(bot => {
     if ((bot as any).__resetToIdleTimer) {
@@ -1905,7 +2037,13 @@ const clubInfo = computed(() => ({
 
       <!-- Club info badge - MV3 minimal -->
       <div class="border border-white/10 px-4 py-2">
-        <div class="text-white text-xs font-medium tracking-wider uppercase">{{ clubInfo.name }}</div>
+        <button
+          @click="openRenameDialog"
+          class="flex items-center gap-2 group cursor-pointer"
+        >
+          <span class="text-white text-xs font-medium tracking-wider uppercase group-hover:text-[#4fd4d4] transition-colors">{{ clubInfo.name }}</span>
+          <Pencil class="w-3 h-3 text-white/30 group-hover:text-[#4fd4d4] transition-colors" />
+        </button>
         <div class="flex items-center gap-3 text-white/50 text-[10px] tracking-wide mt-1">
           <span>LV.{{ clubInfo.level }}</span>
           <span class="text-white/20">·</span>
@@ -1918,9 +2056,20 @@ const clubInfo = computed(() => ({
       </div>
     </div>
 
-    <!-- Hint text - MV3 Style -->
-    <div v-if="!isInitializing && !needsClubCreation && clubStore.hasClub" class="absolute bottom-6 left-1/2 -translate-x-1/2 z-20">
-      <div class="border border-white/10 text-white/40 text-[10px] tracking-wider uppercase px-4 py-2">
+    <!-- Bottom Actions - MV3 Style -->
+    <div v-if="!isInitializing && !needsClubCreation && clubStore.hasClub" class="absolute bottom-6 left-1/2 -translate-x-1/2 z-20 flex flex-col items-center gap-3">
+      <Button
+        variant="game"
+        size="game"
+        class="px-8 gap-2"
+        :disabled="clubStore.loading.match"
+        @click="handlePlayBotMatch"
+      >
+        <Loader2 v-if="clubStore.loading.match" class="w-4 h-4 animate-spin" />
+        <Trophy v-else class="w-4 h-4" />
+        <span>Play Match</span>
+      </Button>
+      <div class="text-white/30 text-[10px] tracking-wider uppercase">
         Tap on a player to interact
       </div>
     </div>
@@ -1990,9 +2139,8 @@ const clubInfo = computed(() => ({
               <Utensils v-else class="w-5 h-5" />
               <span class="text-[10px]">Feed</span>
             </Button>
-            <Button @click="handleRest('short')" variant="game" size="game" class="flex-col gap-1" :disabled="clubStore.loading.rest">
-              <Loader2 v-if="clubStore.loading.rest" class="w-5 h-5 animate-spin" />
-              <BedDouble v-else class="w-5 h-5" />
+            <Button @click="openRestDialog" variant="game" size="game" class="flex-col gap-1">
+              <BedDouble class="w-5 h-5" />
               <span class="text-[10px]">Rest</span>
             </Button>
           </div>
@@ -2048,6 +2196,118 @@ const clubInfo = computed(() => ({
           <Button variant="game-secondary" size="game" @click="showTrainDialog = false">
             Cancel
           </Button>
+        </div>
+      </DialogContent>
+    </Dialog>
+
+    <!-- Rest Dialog - MV3 Style -->
+    <Dialog v-model:open="showRestDialog">
+      <DialogContent variant="game" class="max-w-sm">
+        <div class="space-y-6 text-center">
+          <!-- Header -->
+          <div>
+            <h2 class="text-lg font-light text-white tracking-wide">Rest</h2>
+            <p class="text-xs text-white/40 tracking-widest uppercase mt-1">
+              {{ selectedPlayer?.position }}
+            </p>
+          </div>
+
+          <!-- Horizontal line separator -->
+          <div class="h-[1px] w-full bg-white/10" />
+
+          <div class="space-y-3">
+            <!-- Short Rest Option -->
+            <div
+              class="group py-4 px-4 cursor-pointer transition-colors border border-white/10 rounded-lg hover:bg-white/5 hover:border-[#4fd4d4]/30"
+              @click="handleRest('short')"
+            >
+              <div class="flex items-center justify-between mb-2">
+                <span class="font-medium text-white group-hover:text-[#4fd4d4] transition-colors">Short Rest</span>
+                <span class="text-xs text-white/40">15 min</span>
+              </div>
+              <p class="text-xs text-white/40 text-left">Quick recovery. Restores moderate energy.</p>
+              <div class="flex items-center gap-2 mt-2 text-xs">
+                <span class="text-green-400">+15 Energy</span>
+              </div>
+            </div>
+
+            <!-- Full Rest Option -->
+            <div
+              class="group py-4 px-4 cursor-pointer transition-colors border border-white/10 rounded-lg hover:bg-white/5 hover:border-[#4fd4d4]/30"
+              @click="handleRest('full')"
+            >
+              <div class="flex items-center justify-between mb-2">
+                <span class="font-medium text-white group-hover:text-[#4fd4d4] transition-colors">Full Rest</span>
+                <span class="text-xs text-white/40">40 min</span>
+              </div>
+              <p class="text-xs text-white/40 text-left">Complete recovery. Fully restores energy.</p>
+              <div class="flex items-center gap-2 mt-2 text-xs">
+                <span class="text-green-400">+40 Energy</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Loading indicator -->
+          <div v-if="clubStore.loading.rest" class="flex items-center justify-center gap-2 text-white/60">
+            <Loader2 class="w-4 h-4 animate-spin" />
+            <span class="text-sm">Starting rest...</span>
+          </div>
+
+          <!-- Horizontal line separator -->
+          <div class="h-[1px] w-full bg-white/10" />
+
+          <Button variant="game-secondary" size="game" @click="showRestDialog = false">
+            Cancel
+          </Button>
+        </div>
+      </DialogContent>
+    </Dialog>
+
+    <!-- Rename Club Dialog - MV3 Style -->
+    <Dialog v-model:open="showRenameDialog">
+      <DialogContent variant="game" class="max-w-sm">
+        <div class="space-y-6 text-center">
+          <!-- Header -->
+          <div>
+            <h2 class="text-lg font-light text-white tracking-wide">Rename Club</h2>
+            <p class="text-xs text-white/40 tracking-widest uppercase mt-1">
+              Enter a new name for your club
+            </p>
+          </div>
+
+          <!-- Horizontal line separator -->
+          <div class="h-[1px] w-full bg-white/10" />
+
+          <!-- Input -->
+          <div class="space-y-4">
+            <Input
+              v-model="newClubName"
+              placeholder="Club name..."
+              class="bg-transparent border-white/10 text-white text-center placeholder:text-white/30 focus:border-[#4fd4d4]/50"
+              maxlength="24"
+              @keyup.enter="handleRenameClub"
+            />
+            <p class="text-xs text-white/30">{{ newClubName.length }}/24 characters</p>
+          </div>
+
+          <!-- Horizontal line separator -->
+          <div class="h-[1px] w-full bg-white/10" />
+
+          <div class="flex gap-3">
+            <Button variant="game-secondary" size="game" class="flex-1" @click="showRenameDialog = false">
+              Cancel
+            </Button>
+            <Button
+              variant="game-primary"
+              size="game"
+              class="flex-1"
+              :disabled="clubStore.loading.club || !newClubName.trim()"
+              @click="handleRenameClub"
+            >
+              <Loader2 v-if="clubStore.loading.club" class="w-4 h-4 animate-spin" />
+              <span v-else>Save</span>
+            </Button>
+          </div>
         </div>
       </DialogContent>
     </Dialog>
