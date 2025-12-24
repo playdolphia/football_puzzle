@@ -35,11 +35,14 @@ const showPlayerDialog = ref(false)
 const showTrainDialog = ref(false)
 const showRestDialog = ref(false)
 const showRenameDialog = ref(false)
+const showMatchLevelDialog = ref(false)
+const selectedMatchLevel = ref<1 | 2 | 3>(1)
 const newClubName = ref('')
 
 // Reactive timer tick for countdown updates
 const timerTick = ref(0)
 let dialogTimerInterval: ReturnType<typeof setInterval> | null = null
+let globalTimerInterval: ReturnType<typeof setInterval> | null = null
 
 let camera: THREE.OrthographicCamera
 let renderer: THREE.WebGLRenderer
@@ -358,6 +361,45 @@ const isTaskExpiredCheck = (taskEndsAt: string | null): boolean => {
   const endTime = parseTaskEndTime(taskEndsAt)
   return endTime <= new Date()
 }
+
+// Computed: Check if any player is busy and get soonest end time
+const busyPlayersInfo = computed(() => {
+  // Reference timerTick for reactivity
+  void timerTick.value
+
+  const now = Date.now()
+  const busyPlayers = clubStore.players.filter(p => p.current_task !== null && p.task_ends_at)
+
+  if (busyPlayers.length === 0) {
+    return { hasBusy: false, soonestEndTime: null, countdown: '' }
+  }
+
+  // Find the latest end time (all players must be free before match)
+  let latestEndTime = 0
+  for (const player of busyPlayers) {
+    if (player.task_ends_at) {
+      const endTime = parseTaskEndTime(player.task_ends_at).getTime()
+      if (endTime > latestEndTime) {
+        latestEndTime = endTime
+      }
+    }
+  }
+
+  const diff = latestEndTime - now
+  if (diff <= 0) {
+    return { hasBusy: false, soonestEndTime: null, countdown: '' }
+  }
+
+  // Format countdown
+  const totalSeconds = Math.ceil(diff / 1000)
+  const minutes = Math.floor(totalSeconds / 60)
+  const seconds = totalSeconds % 60
+  const countdown = minutes > 0
+    ? `${minutes}:${seconds.toString().padStart(2, '0')}`
+    : `${seconds}s`
+
+  return { hasBusy: true, soonestEndTime: latestEndTime, countdown }
+})
 
 // Get animation based on player state
 const getAnimationForPlayerState = (
@@ -1021,8 +1063,20 @@ const handleRest = async (type: 'short' | 'full') => {
   }
 }
 
-// Play bot match
-const handlePlayBotMatch = async () => {
+// Open match level selection dialog
+const openMatchLevelDialog = () => {
+  // Check if players are busy
+  if (busyPlayersInfo.value.hasBusy) {
+    return // Button should be disabled, but safety check
+  }
+  selectedMatchLevel.value = 1
+  showMatchLevelDialog.value = true
+}
+
+// Play bot match with selected level
+const handlePlayBotMatch = async (level: 1 | 2 | 3) => {
+  showMatchLevelDialog.value = false
+
   // Clear any pending hide timeout
   if (botHideTimeout) {
     clearTimeout(botHideTimeout)
@@ -1032,7 +1086,7 @@ const handlePlayBotMatch = async () => {
   // Show bots with drop animation
   showBotsWithAnimation()
 
-  const result = await clubStore.playBotMatch()
+  const result = await clubStore.playBotMatch(level)
 
   if (result.ok && result.data) {
     const matchResult = result.data
@@ -1735,6 +1789,9 @@ const BOT_STATE_DURATION = 15 * 1000 // 15 seconds for testing (should be 15 * 6
 
 // Trigger a random animation on a random bot
 const triggerRandomBotAnimation = () => {
+  // Only trigger random animations when bots are visible (during match)
+  if (!botsVisible) return
+
   // Get all bot sprites
   const botSprites = animatedSprites.filter(s => s.team === 'bot')
   if (botSprites.length === 0 || !textureLoaderRef) return
@@ -1856,15 +1913,16 @@ const triggerRandomBotAnimation = () => {
         randomBot.currentAnimState = 'idle'
         randomBot.lastFrameTime = performance.now()
 
-        randomBot.mesh.visible = true
+        // Only make visible if bots should be visible (during match)
+        randomBot.mesh.visible = botsVisible
         // Clean up both flags
         delete (randomBot as any).__holdingRandomState
         delete (randomBot as any).__resetToIdleTimer
       })
     }, BOT_STATE_DURATION)
 
-    // Make bot visible now that new texture is loaded
-    randomBot.mesh.visible = true
+    // Make bot visible now that new texture is loaded (only if bots should be visible)
+    randomBot.mesh.visible = botsVisible
 
     console.log(`[Bot Random Anim] ${randomAnim.name} texture loaded, will play forward and hold on last frame for ${BOT_STATE_DURATION / 1000}s`)
   })
@@ -1880,6 +1938,53 @@ const scheduleNextBotAnimation = () => {
 }
 
 onMounted(async () => {
+  // Restore auth from localStorage if needed (handles page refresh)
+  if (!globalStore.apiToken) {
+    const STORAGE_KEY = 'dolphia_auth'
+    let token: string | null = null
+
+    // Check if we're using test token from env (for dev)
+    if (import.meta.env.VITE_TEST_TRANSFER_TOKEN) {
+      let parsedTestToken = JSON.parse(atob(import.meta.env.VITE_TEST_TRANSFER_TOKEN) ?? '{}')
+      parsedTestToken.expiry = Date.now() + (365 * 24 * 60 * 60 * 1000) // 1 year for dev
+      token = btoa(JSON.stringify(parsedTestToken))
+    } else {
+      // Try to get token from localStorage
+      const storedAuth = localStorage.getItem(STORAGE_KEY)
+      if (storedAuth) {
+        try {
+          const authData = JSON.parse(storedAuth)
+          const now = Date.now()
+          if (authData.expiry && now < authData.expiry) {
+            token = authData.token
+          } else {
+            localStorage.removeItem(STORAGE_KEY)
+          }
+        } catch {
+          localStorage.removeItem(STORAGE_KEY)
+        }
+      }
+    }
+
+    if (token) {
+      try {
+        const tokenData = JSON.parse(atob(token))
+        if (tokenData.apiToken) {
+          globalStore.setApiToken(tokenData.apiToken)
+          globalStore.setUser(tokenData.user)
+        }
+      } catch {
+        // Invalid token, redirect to home
+        router.push('/')
+        return
+      }
+    } else {
+      // No token available, redirect to home
+      router.push('/')
+      return
+    }
+  }
+
   // Ensure club data is loaded
   if (!clubStore.hasClub) {
     await clubStore.fetchClub()
@@ -1901,6 +2006,11 @@ onMounted(async () => {
   // Set up task completion checker (runs every second for local task expiry)
   taskCheckInterval = setInterval(() => {
     clubStore.checkCompletedTasks()
+  }, 1000)
+
+  // Set up global timer for countdown updates
+  globalTimerInterval = setInterval(() => {
+    timerTick.value++
   }, 1000)
 
   // Set up player sync interval (fetches fresh player data from backend)
@@ -1939,6 +2049,10 @@ onUnmounted(() => {
   })
   // Clean up dialog timer
   stopDialogTimer()
+  // Clean up global timer
+  if (globalTimerInterval) {
+    clearInterval(globalTimerInterval)
+  }
 })
 
 // Computed: club info for header
@@ -2062,12 +2176,14 @@ const clubInfo = computed(() => ({
         variant="game"
         size="game"
         class="px-8 gap-2"
-        :disabled="clubStore.loading.match"
-        @click="handlePlayBotMatch"
+        :disabled="clubStore.loading.match || busyPlayersInfo.hasBusy"
+        @click="openMatchLevelDialog"
       >
         <Loader2 v-if="clubStore.loading.match" class="w-4 h-4 animate-spin" />
+        <Clock v-else-if="busyPlayersInfo.hasBusy" class="w-4 h-4" />
         <Trophy v-else class="w-4 h-4" />
-        <span>Play Match</span>
+        <span v-if="busyPlayersInfo.hasBusy">{{ busyPlayersInfo.countdown }}</span>
+        <span v-else>Play Match</span>
       </Button>
       <div class="text-white/30 text-[10px] tracking-wider uppercase">
         Tap on a player to interact
@@ -2308,6 +2424,75 @@ const clubInfo = computed(() => ({
               <span v-else>Save</span>
             </Button>
           </div>
+        </div>
+      </DialogContent>
+    </Dialog>
+
+    <!-- Match Level Dialog - MV3 Style -->
+    <Dialog v-model:open="showMatchLevelDialog">
+      <DialogContent variant="game" class="max-w-sm">
+        <div class="space-y-6 text-center">
+          <!-- Header -->
+          <div>
+            <h2 class="text-lg font-light text-white tracking-wide">Select Difficulty</h2>
+            <p class="text-xs text-white/40 tracking-widest uppercase mt-1">
+              Choose your opponent level
+            </p>
+          </div>
+
+          <!-- Horizontal line separator -->
+          <div class="h-[1px] w-full bg-white/10" />
+
+          <div class="space-y-3">
+            <!-- Level 1 - Easy -->
+            <div
+              class="group py-4 px-4 cursor-pointer transition-colors border border-white/10 rounded-lg hover:bg-white/5 hover:border-[#4fd4d4]/30"
+              @click="handlePlayBotMatch(1)"
+            >
+              <div class="flex items-center justify-between mb-2">
+                <span class="font-medium text-white group-hover:text-[#4fd4d4] transition-colors">Easy</span>
+                <span class="text-xs text-green-400">Level 1</span>
+              </div>
+              <p class="text-xs text-white/40 text-left">Beginner opponents. Good for practice.</p>
+            </div>
+
+            <!-- Level 2 - Medium -->
+            <div
+              class="group py-4 px-4 cursor-pointer transition-colors border border-white/10 rounded-lg hover:bg-white/5 hover:border-[#4fd4d4]/30"
+              @click="handlePlayBotMatch(2)"
+            >
+              <div class="flex items-center justify-between mb-2">
+                <span class="font-medium text-white group-hover:text-[#4fd4d4] transition-colors">Medium</span>
+                <span class="text-xs text-yellow-400">Level 2</span>
+              </div>
+              <p class="text-xs text-white/40 text-left">Balanced challenge. Better rewards.</p>
+            </div>
+
+            <!-- Level 3 - Hard -->
+            <div
+              class="group py-4 px-4 cursor-pointer transition-colors border border-white/10 rounded-lg hover:bg-white/5 hover:border-[#4fd4d4]/30"
+              @click="handlePlayBotMatch(3)"
+            >
+              <div class="flex items-center justify-between mb-2">
+                <span class="font-medium text-white group-hover:text-[#4fd4d4] transition-colors">Hard</span>
+                <span class="text-xs text-rose-400">Level 3</span>
+              </div>
+              <p class="text-xs text-white/40 text-left">Tough opponents. Maximum rewards.</p>
+            </div>
+          </div>
+
+          <!-- Loading indicator -->
+          <div v-if="clubStore.loading.match" class="flex items-center justify-center gap-2 text-white/60">
+            <Loader2 class="w-4 h-4 animate-spin" />
+            <span class="text-sm">Starting match...</span>
+          </div>
+
+          <!-- Horizontal line separator -->
+          <div class="h-[1px] w-full bg-white/10" />
+
+          <Button variant="game-secondary" size="game" @click="showMatchLevelDialog = false">
+            Cancel
+          </Button>
         </div>
       </DialogContent>
     </Dialog>

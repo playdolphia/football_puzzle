@@ -177,10 +177,10 @@ export const clubApi = {
   },
 
   // Play bot match
-  async playBotMatch(token: string): Promise<ApiResponse<BotMatchResult>> {
+  async playBotMatch(level: 1 | 2 | 3, token: string): Promise<ApiResponse<BotMatchResult>> {
     return apiRequest('/Club/Match/Bot', {
       method: 'POST',
-      body: {}
+      body: { level }
     }, token)
   },
 

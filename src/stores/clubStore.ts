@@ -277,11 +277,11 @@ export const useClubStore = defineStore('club', {
     },
 
     // Play bot match
-    async playBotMatch() {
+    async playBotMatch(level: 1 | 2 | 3 = 1) {
       this.loading.match = true
       this.error = null
       try {
-        const response = await clubApi.playBotMatch(this.getToken())
+        const response = await clubApi.playBotMatch(level, this.getToken())
         if (response.ok && response.data) {
           this.lastMatchResult = response.data
           // Update players with new stats
