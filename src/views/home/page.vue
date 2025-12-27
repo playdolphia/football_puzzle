@@ -1,17 +1,27 @@
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useGlobalStore } from '@/stores'
+import { useClubStore } from '@/stores/clubStore'
 import { Button } from '@/components/ui/button'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
-import { AlertCircle, ArrowLeft, Trophy, Zap, Users } from 'lucide-vue-next'
+import { AlertCircle, ArrowLeft, Users, HelpCircle } from 'lucide-vue-next'
 import Loader from '@/components/layouts/Loader.vue'
 import EnergyBar from '@/components/layouts/EnergyBar.vue'
 
 const router = useRouter()
 const globalStore = useGlobalStore()
+const clubStore = useClubStore()
 const userData = ref(null)
 const error = ref('')
+
+// Computed: Get club's average energy or fallback to user energy
+const displayEnergy = computed(() => {
+  if (clubStore.hasClub && clubStore.players.length > 0) {
+    return clubStore.teamAverageEnergy
+  }
+  return globalStore.energyPercentage
+})
 
 const goToProfile = () => {
   const originUrl = import.meta.env.VITE_ORIGIN_URL || 'http://localhost:5173'
@@ -21,10 +31,6 @@ const goToProfile = () => {
 const goToDolphia = () => {
   const originUrl = import.meta.env.VITE_ORIGIN_URL || 'http://localhost:5173'
   window.open(originUrl, '_self')
-}
-
-const goToLeaderboard = () => {
-  router.push('/leaderboard')
 }
 
 onMounted(async () => {
@@ -84,7 +90,8 @@ onMounted(async () => {
         globalStore.getUserAvatar(),
         globalStore.getTokenSum(),
         globalStore.getPendingTasks(),
-        globalStore.fetchUserEnergy()
+        globalStore.fetchUserEnergy(),
+        clubStore.fetchClub() // Fetch club data to show club energy
       ])
     } else {
       if (!token) {
@@ -127,7 +134,8 @@ onMounted(async () => {
         globalStore.getUserAvatar(),
         globalStore.getTokenSum(),
         globalStore.getPendingTasks(),
-        globalStore.fetchUserEnergy()
+        globalStore.fetchUserEnergy(),
+        clubStore.fetchClub() // Fetch club data to show club energy
       ])
 
       userData.value = tokenData
@@ -188,21 +196,25 @@ onMounted(async () => {
           </button>
 
           <!-- Stats Row -->
-          <div class="flex items-center justify-between text-sm border-b border-white/10 pb-4">
+          <div class="flex items-center justify-center text-sm border-b border-white/10 pb-4">
             <div>
               <span class="text-white/40 uppercase tracking-widest text-xs">Tokens:</span>
               <span class="text-white/80 ml-2 font-medium">{{ globalStore.tokenSum || 0 }}</span>
             </div>
-            <div>
-              <span class="text-white/40 uppercase tracking-widest text-xs">Accuracy:</span>
-              <span class="text-white/80 ml-2 font-medium">
-                {{ globalStore.userProfile?.rate ? Math.round(globalStore.userProfile.rate.accuracy * 100) : 0 }}%
-              </span>
+          </div>
+
+          <!-- Club Info (if club exists) -->
+          <div v-if="clubStore.hasClub && clubStore.club" class="flex items-center justify-between text-xs text-white/50 pb-2">
+            <span class="uppercase tracking-wide">{{ clubStore.club.name }}</span>
+            <div class="flex items-center gap-3">
+              <span>LV.{{ clubStore.teamAverageLevel }}</span>
+              <span class="text-white/20">·</span>
+              <span>{{ clubStore.club.fans }} FANS</span>
             </div>
           </div>
 
-          <!-- Energy Display - MV3 Style -->
-          <EnergyBar :value="globalStore.energyPercentage" />
+          <!-- Energy Display - MV3 Style (shows club energy if available) -->
+          <EnergyBar :value="displayEnergy" />
         </div>
 
         <!-- Main Actions -->
@@ -218,23 +230,27 @@ onMounted(async () => {
           <div class="h-[1px] w-full bg-white/10" />
 
           <div class="flex flex-col gap-4">
+            <div class="relative">
+              <!-- Glowing background animation -->
+              <div class="absolute inset-0 bg-[#4fd4d4] opacity-40 blur-xl rounded-lg animate-pulse"></div>
+              <Button
+                @click="router.push('/game')"
+                variant="game-primary"
+                size="game-lg"
+                class="w-full gap-3 relative"
+              >
+                <Users class="w-5 h-5" />
+                My Club
+              </Button>
+            </div>
             <Button
-              @click="router.push('/game')"
-              variant="game-primary"
-              size="game-lg"
-              class="w-full gap-3"
-            >
-              <Users class="w-5 h-5" />
-              My Club
-            </Button>
-            <Button
-              @click="goToLeaderboard"
+              @click="router.push('/help')"
               variant="game-outline"
               size="game"
               class="w-full gap-3"
             >
-              <Trophy class="w-5 h-5" />
-              View Leaderboard
+              <HelpCircle class="w-5 h-5" />
+              How to Play
             </Button>
             <Button
               @click="goToDolphia"

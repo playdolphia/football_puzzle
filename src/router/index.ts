@@ -20,19 +20,19 @@ const router = createRouter({
       }
     },
     {
-      path: '/leaderboard',
-      name: 'club-leaderboard',
-      component: () => import('@/views/leaderboard/page.vue'),
-      meta: {
-        title: 'Club Management Leaderboard'
-      }
-    },
-    {
       path: '/game',
       name: 'club-game',
       component: () => import('@/views/game/page.vue'),
       meta: {
         title: 'Club Field View'
+      }
+    },
+    {
+      path: '/help',
+      name: 'club-help',
+      component: () => import('@/views/help/page.vue'),
+      meta: {
+        title: 'Club Management Guide'
       }
     },
     // 404 page

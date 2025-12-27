@@ -1090,13 +1090,24 @@ const handlePlayBotMatch = async (level: 1 | 2 | 3) => {
 
   if (result.ok && result.data) {
     const matchResult = result.data
-    // Show match result
-    if (matchResult.result === 'win') {
+    console.log('[Match Result]', matchResult)
+    // Show match result - normalize result string to lowercase for comparison
+    const normalizedResult = matchResult.result?.toLowerCase()
+    if (normalizedResult === 'win') {
       toast.success(`Victory! ${matchResult.score.club} - ${matchResult.score.bot}`)
-    } else if (matchResult.result === 'loss') {
+    } else if (normalizedResult === 'loss' || normalizedResult === 'lose') {
       toast.error(`Defeat! ${matchResult.score.club} - ${matchResult.score.bot}`)
-    } else {
+    } else if (normalizedResult === 'draw') {
       toast.info(`Draw! ${matchResult.score.club} - ${matchResult.score.bot}`)
+    } else {
+      // Fallback: determine result from score comparison
+      if (matchResult.score.club > matchResult.score.bot) {
+        toast.success(`Victory! ${matchResult.score.club} - ${matchResult.score.bot}`)
+      } else if (matchResult.score.club < matchResult.score.bot) {
+        toast.error(`Defeat! ${matchResult.score.club} - ${matchResult.score.bot}`)
+      } else {
+        toast.info(`Draw! ${matchResult.score.club} - ${matchResult.score.bot}`)
+      }
     }
     // Trigger animation update
     await nextTick()
@@ -2175,7 +2186,7 @@ const clubInfo = computed(() => ({
       <Button
         variant="game"
         size="game"
-        class="px-8 gap-2"
+        class="px-8 gap-2 shadow-lg shadow-[#4fd4d4]/20 border border-[#4fd4d4]/30 hover:shadow-xl hover:shadow-[#4fd4d4]/30 transition-all"
         :disabled="clubStore.loading.match || busyPlayersInfo.hasBusy"
         @click="openMatchLevelDialog"
       >
@@ -2246,16 +2257,16 @@ const clubInfo = computed(() => ({
 
           <!-- Action Buttons - MV3 Style (show if no task or task is expired) -->
           <div v-else class="flex items-center justify-center gap-8 py-2">
-            <Button @click="openTrainDialog" variant="game-primary" size="game" class="flex-col gap-1">
+            <Button @click="openTrainDialog" variant="game-primary" size="game" class="flex-col gap-1 shadow-md hover:shadow-lg transition-shadow">
               <Dumbbell class="w-5 h-5" />
               <span class="text-[10px]">Train</span>
             </Button>
-            <Button @click="handleFeed" variant="game" size="game" class="flex-col gap-1" :disabled="clubStore.loading.feed">
+            <Button @click="handleFeed" variant="game" size="game" class="flex-col gap-1 shadow-md hover:shadow-lg transition-shadow" :disabled="clubStore.loading.feed">
               <Loader2 v-if="clubStore.loading.feed" class="w-5 h-5 animate-spin" />
               <Utensils v-else class="w-5 h-5" />
               <span class="text-[10px]">Feed</span>
             </Button>
-            <Button @click="openRestDialog" variant="game" size="game" class="flex-col gap-1">
+            <Button @click="openRestDialog" variant="game" size="game" class="flex-col gap-1 shadow-md hover:shadow-lg transition-shadow">
               <BedDouble class="w-5 h-5" />
               <span class="text-[10px]">Rest</span>
             </Button>
@@ -2284,7 +2295,7 @@ const clubInfo = computed(() => ({
             <p class="text-sm text-white/40">Loading options...</p>
           </div>
 
-          <div v-else class="space-y-4">
+          <div v-else class="space-y-4 max-h-[400px] overflow-y-auto scrollbar-thin scrollbar-thumb-white/10 scrollbar-track-transparent hover:scrollbar-thumb-white/20">
             <div
               v-for="option in clubStore.trainingOptions"
               :key="option.type"
