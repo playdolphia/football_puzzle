@@ -230,19 +230,15 @@ onMounted(async () => {
           <div class="h-[1px] w-full bg-white/10" />
 
           <div class="flex flex-col gap-4">
-            <div class="relative">
-              <!-- Glowing background animation -->
-              <div class="absolute inset-0 bg-[#4fd4d4] opacity-40 blur-xl rounded-lg animate-pulse"></div>
-              <Button
-                @click="router.push('/game')"
-                variant="game-primary"
-                size="game-lg"
-                class="w-full gap-3 relative"
-              >
-                <Users class="w-5 h-5" />
-                My Club
-              </Button>
-            </div>
+            <Button
+              @click="router.push('/game')"
+              variant="game"
+              size="game"
+              class="w-full gap-2 px-8 shadow-lg shadow-[#4fd4d4]/20 border border-[#4fd4d4]/30 hover:shadow-xl hover:shadow-[#4fd4d4]/30 transition-all"
+            >
+              <Users class="w-5 h-5" />
+              My Club
+            </Button>
             <Button
               @click="router.push('/help')"
               variant="game-outline"

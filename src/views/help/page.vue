@@ -46,6 +46,47 @@ const goBack = () => {
           </div>
         </section>
 
+        <!-- Your Players -->
+        <section class="border border-white/10 p-6 space-y-4">
+          <h2 class="text-white text-lg font-medium tracking-wide border-b border-white/10 pb-3">Understanding Your Players</h2>
+          <div class="space-y-4 text-white/60 text-sm leading-relaxed">
+            <p>Each player in your squad is a Dolphin with unique stats and abilities. Your team consists of different positions:</p>
+            <div class="grid grid-cols-2 gap-3 my-4">
+              <div class="border border-white/10 p-3 rounded">
+                <div class="text-white font-medium mb-1">GK (Goalkeeper)</div>
+                <div class="text-xs text-white/40">Guards your goal</div>
+              </div>
+              <div class="border border-white/10 p-3 rounded">
+                <div class="text-white font-medium mb-1">DEF (Defender)</div>
+                <div class="text-xs text-white/40">Protects your side</div>
+              </div>
+              <div class="border border-white/10 p-3 rounded">
+                <div class="text-white font-medium mb-1">MID (Midfielder)</div>
+                <div class="text-xs text-white/40">Controls the game</div>
+              </div>
+              <div class="border border-white/10 p-3 rounded">
+                <div class="text-white font-medium mb-1">ATT (Attacker)</div>
+                <div class="text-xs text-white/40">Scores goals</div>
+              </div>
+            </div>
+
+            <div class="border-t border-white/10 pt-4 mt-4">
+              <h3 class="text-white font-medium mb-3">Player Stats</h3>
+              <div class="space-y-2">
+                <div><span class="text-[#4fd4d4]">Stamina:</span> How long they can maintain peak performance</div>
+                <div><span class="text-[#4fd4d4]">Strength:</span> Physical power and defensive ability</div>
+                <div><span class="text-[#4fd4d4]">Awareness:</span> Tactical intelligence and positioning</div>
+                <div><span class="text-[#4fd4d4]">Finishing:</span> Ability to score goals</div>
+              </div>
+            </div>
+
+            <div class="border-t border-white/10 pt-4 mt-4">
+              <h3 class="text-white font-medium mb-2">Level & XP</h3>
+              <p>Players gain XP through training and matches. As they level up, they become stronger and more valuable to your club.</p>
+            </div>
+          </div>
+        </section>
+
         <!-- Player Management -->
         <section class="border border-white/10 p-6 space-y-4">
           <h2 class="text-white text-lg font-medium tracking-wide border-b border-white/10 pb-3">Managing Your Players</h2>
@@ -122,29 +163,64 @@ const goBack = () => {
           </div>
         </section>
 
+        <!-- Club & Progression -->
+        <section class="border border-white/10 p-6 space-y-4">
+          <h2 class="text-white text-lg font-medium tracking-wide border-b border-white/10 pb-3">Club Progression</h2>
+          <div class="space-y-3 text-white/60 text-sm leading-relaxed">
+            <div class="space-y-2">
+              <h3 class="text-white font-medium">Club Level</h3>
+              <p>Your club's level is the average level of all your players. Train your team to increase your club's overall strength.</p>
+            </div>
+
+            <div class="space-y-2 pt-2">
+              <h3 class="text-white font-medium">Fans</h3>
+              <p>Win matches to earn fans! The more fans you have, the more prestigious your club becomes. Fans are earned as rewards when you win matches against bot opponents.</p>
+            </div>
+
+            <div class="space-y-2 pt-2">
+              <h3 class="text-white font-medium">Renaming Your Club</h3>
+              <p>Click on your club name in the top-left corner of the field view to rename your club at any time.</p>
+            </div>
+          </div>
+        </section>
+
+        <!-- Bot Opponents -->
+        <section class="border border-white/10 p-6 space-y-4">
+          <h2 class="text-white text-lg font-medium tracking-wide border-b border-white/10 pb-3">About Bot Opponents</h2>
+          <div class="space-y-3 text-white/60 text-sm leading-relaxed">
+            <p>During matches, your Dolphin team will face off against bot opponents. These bots appear on the field with animations when you start a match and disappear after the match concludes.</p>
+            <p>Bots may occasionally show different animations during the match - from aggressive stances to training poses. These are just for visual variety and don't affect the match outcome.</p>
+            <p>The match difficulty you choose determines how challenging the bot team will be and the rewards you'll receive for winning.</p>
+          </div>
+        </section>
+
         <!-- Tips -->
         <section class="border border-white/10 p-6 space-y-4">
-          <h2 class="text-white text-lg font-medium tracking-wide border-b border-white/10 pb-3">Tips</h2>
+          <h2 class="text-white text-lg font-medium tracking-wide border-b border-white/10 pb-3">Pro Tips</h2>
           <ul class="space-y-3 text-white/60 text-sm">
             <li class="flex items-start gap-2">
               <span class="text-[#4fd4d4]">•</span>
-              <span>Tap on any player in the field view to see their stats and take actions</span>
+              <span>Tap on any Dolphin in the field view to see their stats and take actions</span>
             </li>
             <li class="flex items-start gap-2">
               <span class="text-[#4fd4d4]">•</span>
-              <span>Keep an eye on your team's average energy in the top-left corner</span>
+              <span>Keep an eye on your team's average energy percentage displayed in the top-left corner</span>
             </li>
             <li class="flex items-start gap-2">
               <span class="text-[#4fd4d4]">•</span>
-              <span>Train strategically - different training types improve different stats</span>
+              <span>Train strategically - different training types improve different stats based on what your team needs</span>
             </li>
             <li class="flex items-start gap-2">
               <span class="text-[#4fd4d4]">•</span>
-              <span>Click on your club name to rename your club at any time</span>
+              <span>Balance training with rest to keep your team's energy high for matches</span>
             </li>
             <li class="flex items-start gap-2">
               <span class="text-[#4fd4d4]">•</span>
-              <span>Bot opponents will show animations occasionally during matches</span>
+              <span>Use feeding for quick energy boosts when you need a player ready quickly</span>
+            </li>
+            <li class="flex items-start gap-2">
+              <span class="text-[#4fd4d4]">•</span>
+              <span>Start with Easy difficulty matches when your team is new, then progress to harder challenges</span>
             </li>
           </ul>
         </section>

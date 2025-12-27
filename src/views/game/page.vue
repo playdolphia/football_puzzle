@@ -2155,13 +2155,13 @@ const clubInfo = computed(() => ({
         @click="goBack"
         variant="game-icon"
         size="game-icon"
-        class="w-10 h-10 border border-white/10 hover:border-[#4fd4d4]/50"
+        class="w-10 h-10 border border-white/10 hover:border-[#4fd4d4]/50 backdrop-blur-md bg-[#0a0812]/80"
       >
         <ArrowLeft class="w-5 h-5" />
       </Button>
 
       <!-- Club info badge - MV3 minimal -->
-      <div class="border border-white/10 px-4 py-2">
+      <div class="border border-white/10 px-4 py-2 backdrop-blur-md bg-[#0a0812]/80">
         <button
           @click="openRenameDialog"
           class="flex items-center gap-2 group cursor-pointer"
@@ -2182,7 +2182,7 @@ const clubInfo = computed(() => ({
     </div>
 
     <!-- Bottom Actions - MV3 Style -->
-    <div v-if="!isInitializing && !needsClubCreation && clubStore.hasClub" class="absolute bottom-6 left-1/2 -translate-x-1/2 z-20 flex flex-col items-center gap-3">
+    <div v-if="!isInitializing && !needsClubCreation && clubStore.hasClub" class="absolute bottom-6 left-1/2 -translate-x-1/2 z-20 flex flex-col items-center gap-3 px-6 py-4 border border-white/10 backdrop-blur-md bg-[#0a0812]/80">
       <Button
         variant="game"
         size="game"
@@ -2257,16 +2257,16 @@ const clubInfo = computed(() => ({
 
           <!-- Action Buttons - MV3 Style (show if no task or task is expired) -->
           <div v-else class="flex items-center justify-center gap-8 py-2">
-            <Button @click="openTrainDialog" variant="game-primary" size="game" class="flex-col gap-1 shadow-md hover:shadow-lg transition-shadow">
+            <Button @click="openTrainDialog" variant="game" size="game" class="flex-col gap-1 shadow-lg shadow-[#4fd4d4]/20 border border-[#4fd4d4]/30 hover:shadow-xl hover:shadow-[#4fd4d4]/30 transition-all">
               <Dumbbell class="w-5 h-5" />
               <span class="text-[10px]">Train</span>
             </Button>
-            <Button @click="handleFeed" variant="game" size="game" class="flex-col gap-1 shadow-md hover:shadow-lg transition-shadow" :disabled="clubStore.loading.feed">
+            <Button @click="handleFeed" variant="game" size="game" class="flex-col gap-1 shadow-lg shadow-[#4fd4d4]/20 border border-[#4fd4d4]/30 hover:shadow-xl hover:shadow-[#4fd4d4]/30 transition-all" :disabled="clubStore.loading.feed">
               <Loader2 v-if="clubStore.loading.feed" class="w-5 h-5 animate-spin" />
               <Utensils v-else class="w-5 h-5" />
               <span class="text-[10px]">Feed</span>
             </Button>
-            <Button @click="openRestDialog" variant="game" size="game" class="flex-col gap-1 shadow-md hover:shadow-lg transition-shadow">
+            <Button @click="openRestDialog" variant="game" size="game" class="flex-col gap-1 shadow-lg shadow-[#4fd4d4]/20 border border-[#4fd4d4]/30 hover:shadow-xl hover:shadow-[#4fd4d4]/30 transition-all">
               <BedDouble class="w-5 h-5" />
               <span class="text-[10px]">Rest</span>
             </Button>
