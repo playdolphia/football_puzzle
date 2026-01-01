@@ -39,6 +39,16 @@ const showMatchLevelDialog = ref(false)
 const selectedMatchLevel = ref<1 | 2 | 3>(1)
 const newClubName = ref('')
 
+// Confirmation dialog state
+const showConfirmDialog = ref(false)
+const confirmAction = ref<{
+  type: 'train' | 'feed' | 'rest' | 'match'
+  title: string
+  description: string
+  details?: string
+  onConfirm: () => void
+} | null>(null)
+
 // Reactive timer tick for countdown updates
 const timerTick = ref(0)
 let dialogTimerInterval: ReturnType<typeof setInterval> | null = null
@@ -930,14 +940,33 @@ const openTrainDialog = () => {
   }
 }
 
-// Train player
-const handleTrain = async (type: 'light' | 'balanced' | 'conditioning' | 'finishing') => {
+// Show train confirmation
+const showTrainConfirmation = (option: TrainingOption) => {
   if (!selectedPlayer.value) return
+
+  const playerName = selectedPlayer.value.position
+  const duration = Math.round(option.duration / 60)
+
+  confirmAction.value = {
+    type: 'train',
+    title: 'Start Training?',
+    description: `Train ${playerName} with ${option.type} training for ${duration} minutes.`,
+    details: `+${option.xp_gain} XP • -${option.energy_cost} energy`,
+    onConfirm: () => executeTraining(option.type)
+  }
+  showTrainDialog.value = false
+  showConfirmDialog.value = true
+}
+
+// Train player
+const executeTraining = async (type: 'light' | 'balanced' | 'conditioning' | 'finishing') => {
+  if (!selectedPlayer.value) return
+
+  showConfirmDialog.value = false
 
   const result = await clubStore.trainPlayer(selectedPlayer.value.id, type)
 
   if (result.ok) {
-    showTrainDialog.value = false
     selectedPlayer.value = null
     toast.success('Training started!')
     // Trigger animation update after Vue processes the state change
@@ -946,6 +975,8 @@ const handleTrain = async (type: 'light' | 'balanced' | 'conditioning' | 'finish
   } else {
     toast.error(result.message || 'Failed to start training')
   }
+
+  confirmAction.value = null
 }
 
 // Trigger a quick animation for instant actions (like feeding)
@@ -1021,15 +1052,33 @@ const triggerInstantAnimation = (playerId: number) => {
   })
 }
 
-// Feed player
-const handleFeed = async () => {
+// Show feed confirmation
+const showFeedConfirmation = () => {
   if (!selectedPlayer.value) return
+
+  const playerName = selectedPlayer.value.position
+
+  confirmAction.value = {
+    type: 'feed',
+    title: 'Feed Player?',
+    description: `Feed ${playerName} to restore energy.`,
+    details: '+20 energy',
+    onConfirm: () => executeFeed()
+  }
+  showPlayerDialog.value = false
+  showConfirmDialog.value = true
+}
+
+// Feed player
+const executeFeed = async () => {
+  if (!selectedPlayer.value) return
+
+  showConfirmDialog.value = false
 
   const playerId = selectedPlayer.value.id
   const result = await clubStore.feedPlayers([playerId])
 
   if (result.ok) {
-    showPlayerDialog.value = false
     // Trigger feeding animation
     triggerInstantAnimation(playerId)
     selectedPlayer.value = null
@@ -1037,6 +1086,8 @@ const handleFeed = async () => {
   } else {
     toast.error(result.message || 'Failed to feed player')
   }
+
+  confirmAction.value = null
 }
 
 // Open rest dialog
@@ -1045,14 +1096,35 @@ const openRestDialog = () => {
   showRestDialog.value = true
 }
 
-// Rest player
-const handleRest = async (type: 'short' | 'full') => {
+// Show rest confirmation
+const showRestConfirmation = (type: 'short' | 'full') => {
   if (!selectedPlayer.value) return
+
+  const playerName = selectedPlayer.value.position
+  const isShort = type === 'short'
+  const duration = isShort ? '15' : '40'
+  const energyGain = isShort ? '15' : '40'
+
+  confirmAction.value = {
+    type: 'rest',
+    title: 'Start Rest?',
+    description: `${isShort ? 'Short' : 'Full'} rest for ${playerName} (${duration} minutes).`,
+    details: `+${energyGain} energy`,
+    onConfirm: () => executeRest(type)
+  }
+  showRestDialog.value = false
+  showConfirmDialog.value = true
+}
+
+// Rest player
+const executeRest = async (type: 'short' | 'full') => {
+  if (!selectedPlayer.value) return
+
+  showConfirmDialog.value = false
 
   const result = await clubStore.restPlayer(selectedPlayer.value.id, type)
 
   if (result.ok) {
-    showRestDialog.value = false
     selectedPlayer.value = null
     toast.success('Player is now resting!')
     // Trigger animation update after Vue processes the state change
@@ -1061,6 +1133,8 @@ const handleRest = async (type: 'short' | 'full') => {
   } else {
     toast.error(result.message || 'Failed to rest player')
   }
+
+  confirmAction.value = null
 }
 
 // Open match level selection dialog
@@ -1073,9 +1147,25 @@ const openMatchLevelDialog = () => {
   showMatchLevelDialog.value = true
 }
 
-// Play bot match with selected level
-const handlePlayBotMatch = async (level: 1 | 2 | 3) => {
+// Show match confirmation
+const showMatchConfirmation = (level: 1 | 2 | 3) => {
+  const difficulties = { 1: 'Easy', 2: 'Medium', 3: 'Hard' }
+  const difficultyName = difficulties[level]
+
+  confirmAction.value = {
+    type: 'match',
+    title: 'Start Match?',
+    description: `Play a ${difficultyName} match against bot opponents.`,
+    details: level === 1 ? 'Lower rewards' : level === 2 ? 'Better rewards' : 'Maximum rewards',
+    onConfirm: () => executePlayBotMatch(level)
+  }
   showMatchLevelDialog.value = false
+  showConfirmDialog.value = true
+}
+
+// Play bot match with selected level
+const executePlayBotMatch = async (level: 1 | 2 | 3) => {
+  showConfirmDialog.value = false
 
   // Clear any pending hide timeout
   if (botHideTimeout) {
@@ -1122,6 +1212,8 @@ const handlePlayBotMatch = async (level: 1 | 2 | 3) => {
     // Hide bots immediately on error
     hideBotsWithAnimation()
   }
+
+  confirmAction.value = null
 }
 
 // Format task name for display (converts "rest:short:15:0" to "Resting")
@@ -2261,7 +2353,7 @@ const clubInfo = computed(() => ({
               <Dumbbell class="w-5 h-5" />
               <span class="text-[10px]">Train</span>
             </Button>
-            <Button @click="handleFeed" variant="game" size="game" class="flex-col gap-1 shadow-lg shadow-[#4fd4d4]/20 border border-[#4fd4d4]/30 hover:shadow-xl hover:shadow-[#4fd4d4]/30 transition-all" :disabled="clubStore.loading.feed">
+            <Button @click="showFeedConfirmation" variant="game" size="game" class="flex-col gap-1 shadow-lg shadow-[#4fd4d4]/20 border border-[#4fd4d4]/30 hover:shadow-xl hover:shadow-[#4fd4d4]/30 transition-all" :disabled="clubStore.loading.feed">
               <Loader2 v-if="clubStore.loading.feed" class="w-5 h-5 animate-spin" />
               <Utensils v-else class="w-5 h-5" />
               <span class="text-[10px]">Feed</span>
@@ -2300,7 +2392,7 @@ const clubInfo = computed(() => ({
               v-for="option in clubStore.trainingOptions"
               :key="option.type"
               class="group py-3 cursor-pointer transition-colors border-b border-white/5 last:border-0 hover:bg-white/5"
-              @click="handleTrain(option.type)"
+              @click="showTrainConfirmation(option)"
             >
               <div class="flex items-center justify-between mb-2">
                 <span class="font-medium capitalize text-white group-hover:text-[#4fd4d4] transition-colors">{{ option.type }}</span>
@@ -2346,7 +2438,7 @@ const clubInfo = computed(() => ({
             <!-- Short Rest Option -->
             <div
               class="group py-4 px-4 cursor-pointer transition-colors border border-white/10 rounded-lg hover:bg-white/5 hover:border-[#4fd4d4]/30"
-              @click="handleRest('short')"
+              @click="showRestConfirmation('short')"
             >
               <div class="flex items-center justify-between mb-2">
                 <span class="font-medium text-white group-hover:text-[#4fd4d4] transition-colors">Short Rest</span>
@@ -2361,7 +2453,7 @@ const clubInfo = computed(() => ({
             <!-- Full Rest Option -->
             <div
               class="group py-4 px-4 cursor-pointer transition-colors border border-white/10 rounded-lg hover:bg-white/5 hover:border-[#4fd4d4]/30"
-              @click="handleRest('full')"
+              @click="showRestConfirmation('full')"
             >
               <div class="flex items-center justify-between mb-2">
                 <span class="font-medium text-white group-hover:text-[#4fd4d4] transition-colors">Full Rest</span>
@@ -2458,7 +2550,7 @@ const clubInfo = computed(() => ({
             <!-- Level 1 - Easy -->
             <div
               class="group py-4 px-4 cursor-pointer transition-colors border border-white/10 rounded-lg hover:bg-white/5 hover:border-[#4fd4d4]/30"
-              @click="handlePlayBotMatch(1)"
+              @click="showMatchConfirmation(1)"
             >
               <div class="flex items-center justify-between mb-2">
                 <span class="font-medium text-white group-hover:text-[#4fd4d4] transition-colors">Easy</span>
@@ -2470,7 +2562,7 @@ const clubInfo = computed(() => ({
             <!-- Level 2 - Medium -->
             <div
               class="group py-4 px-4 cursor-pointer transition-colors border border-white/10 rounded-lg hover:bg-white/5 hover:border-[#4fd4d4]/30"
-              @click="handlePlayBotMatch(2)"
+              @click="showMatchConfirmation(2)"
             >
               <div class="flex items-center justify-between mb-2">
                 <span class="font-medium text-white group-hover:text-[#4fd4d4] transition-colors">Medium</span>
@@ -2482,7 +2574,7 @@ const clubInfo = computed(() => ({
             <!-- Level 3 - Hard -->
             <div
               class="group py-4 px-4 cursor-pointer transition-colors border border-white/10 rounded-lg hover:bg-white/5 hover:border-[#4fd4d4]/30"
-              @click="handlePlayBotMatch(3)"
+              @click="showMatchConfirmation(3)"
             >
               <div class="flex items-center justify-between mb-2">
                 <span class="font-medium text-white group-hover:text-[#4fd4d4] transition-colors">Hard</span>
@@ -2504,6 +2596,50 @@ const clubInfo = computed(() => ({
           <Button variant="game-secondary" size="game" @click="showMatchLevelDialog = false">
             Cancel
           </Button>
+        </div>
+      </DialogContent>
+    </Dialog>
+
+    <!-- Confirmation Dialog - MV3 Style -->
+    <Dialog v-model:open="showConfirmDialog">
+      <DialogContent variant="game" class="max-w-sm">
+        <div v-if="confirmAction" class="space-y-6 text-center">
+          <!-- Header -->
+          <div>
+            <h2 class="text-lg font-light text-white tracking-wide">{{ confirmAction.title }}</h2>
+          </div>
+
+          <!-- Horizontal line separator -->
+          <div class="h-[1px] w-full bg-white/10" />
+
+          <!-- Description -->
+          <div class="space-y-2">
+            <p class="text-sm text-white/70">{{ confirmAction.description }}</p>
+            <p v-if="confirmAction.details" class="text-xs text-[#4fd4d4]">{{ confirmAction.details }}</p>
+          </div>
+
+          <!-- Horizontal line separator -->
+          <div class="h-[1px] w-full bg-white/10" />
+
+          <!-- Action Buttons -->
+          <div class="flex gap-3">
+            <Button
+              variant="game-secondary"
+              size="game"
+              class="flex-1"
+              @click="showConfirmDialog = false; confirmAction = null"
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="game-primary"
+              size="game"
+              class="flex-1"
+              @click="confirmAction?.onConfirm()"
+            >
+              Confirm
+            </Button>
+          </div>
         </div>
       </DialogContent>
     </Dialog>
