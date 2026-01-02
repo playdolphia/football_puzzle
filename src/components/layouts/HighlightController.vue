@@ -1,5 +1,4 @@
 <script setup lang="ts">
-import { computed } from 'vue'
 import { Button } from '@/components/ui/button'
 import { Play, Pause, SkipForward, X } from 'lucide-vue-next'
 
@@ -21,7 +20,7 @@ const emit = defineEmits<{
 </script>
 
 <template>
-  <div class="absolute bottom-24 left-1/2 -translate-x-1/2 z-30">
+  <div class="absolute bottom-0 left-0 right-0 sm:bottom-24 sm:left-1/2 sm:right-auto sm:-translate-x-1/2 z-30">
     <!-- Main Controller Card -->
     <div class="border border-white/10 backdrop-blur-md bg-[#0a0812]/90 px-6 py-4 min-w-[320px]">
       <!-- Score Display -->
