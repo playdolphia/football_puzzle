@@ -1486,12 +1486,12 @@ const processHighlightEvent = (event: MatchEvent) => {
       animateSpriteHighlight(playerSprite, 'shot')
     }
 
-    // Animate ball toward goal
+    // Animate ball toward goal (into the net, not just to goalkeeper)
     const playerPos = getPositionForPlayer(event.player_id)
     if (playerPos) {
       const goalPos = event.team === 'club'
-        ? { x: botPositions[0].x, y: botPositions[0].y } // Bot goal
-        : { x: dolphinPositions[5].x, y: dolphinPositions[5].y } // Club goal
+        ? { x: 2.5, y: 2.5 } // Bot goal (right side) - into the net
+        : { x: -2.2, y: -0.2 } // Club goal (left side) - into the net
       animateBall(playerPos, goalPos, 0.8)
     }
   } else if (event.action === 'goal' && event.player_id) {
