@@ -8,16 +8,17 @@ import {
   Dialog,
   DialogContent
 } from '@/components/ui/dialog'
-import { ArrowLeft, Dumbbell, Utensils, Zap, Clock, Loader2, Trophy, Plus, BedDouble, Pencil } from 'lucide-vue-next'
+import { ArrowLeft, Dumbbell, Utensils, Zap, Clock, Loader2, Trophy, Plus, BedDouble, Pencil, PlayCircle } from 'lucide-vue-next'
 import { Input } from '@/components/ui/input'
 import { toast } from 'vue-sonner'
 import StatBox from '@/components/layouts/StatBox.vue'
 import EnergyBar from '@/components/layouts/EnergyBar.vue'
 import PositionBadge from '@/components/layouts/PositionBadge.vue'
 import Loader from '@/components/layouts/Loader.vue'
+import HighlightController from '@/components/HighlightController.vue'
 import * as THREE from 'three'
 import gsap from 'gsap'
-import type { Player, TrainingOption } from '@/services/clubApi'
+import type { Player, TrainingOption, BotMatchResult, MatchScene, MatchEvent } from '@/services/clubApi'
 
 const router = useRouter()
 const globalStore = useGlobalStore()
@@ -48,6 +49,23 @@ const confirmAction = ref<{
   details?: string
   onConfirm: () => void
 } | null>(null)
+
+// Match highlights state (field-based playback)
+const isHighlightMode = ref(false)
+const highlightPlaying = ref(false)
+const lastMatchResultForViewer = ref<BotMatchResult | null>(null)
+const currentHighlightSceneIndex = ref(0)
+const currentHighlightEventIndex = ref(0)
+const highlightRunningScore = ref({ club: 0, bot: 0 })
+let highlightPlaybackInterval: ReturnType<typeof setInterval> | null = null
+
+// Ball sprite for highlight animations
+let ballMesh: THREE.Mesh | null = null
+let ballTexture: THREE.Texture | null = null
+const ballFrameCount = 5 // ball_idle.png has 5 frames
+let ballCurrentFrame = 0
+let ballAnimationTime = 0
+const ballFrameDuration = 100 // ms per frame
 
 // Reactive timer tick for countdown updates
 const timerTick = ref(0)
@@ -1181,6 +1199,10 @@ const executePlayBotMatch = async (level: 1 | 2 | 3) => {
   if (result.ok && result.data) {
     const matchResult = result.data
     console.log('[Match Result]', matchResult)
+
+    // Store result for highlights viewer
+    lastMatchResultForViewer.value = matchResult
+
     // Show match result - normalize result string to lowercase for comparison
     const normalizedResult = matchResult.result?.toLowerCase()
     if (normalizedResult === 'win') {
@@ -1199,14 +1221,22 @@ const executePlayBotMatch = async (level: 1 | 2 | 3) => {
         toast.info(`Draw! ${matchResult.score.club} - ${matchResult.score.bot}`)
       }
     }
+
     // Trigger animation update
     await nextTick()
     updatePlayerAnimations()
 
-    // Hide bots after 10 seconds with reverse animation
-    botHideTimeout = setTimeout(() => {
-      hideBotsWithAnimation()
-    }, 10000)
+    // If match has events, show highlight mode automatically after a short delay
+    if (matchResult.match_events?.scenes?.length) {
+      setTimeout(() => {
+        openHighlightMode()
+      }, 1500) // Small delay to let the user see the result toast first
+    } else {
+      // Hide bots after 10 seconds with reverse animation (only if no highlights)
+      botHideTimeout = setTimeout(() => {
+        hideBotsWithAnimation()
+      }, 10000)
+    }
   } else {
     toast.error(result.message || 'Failed to start match')
     // Hide bots immediately on error
@@ -1214,6 +1244,407 @@ const executePlayBotMatch = async (level: 1 | 2 | 3) => {
   }
 
   confirmAction.value = null
+}
+
+// ============ HIGHLIGHT PLAYBACK SYSTEM ============
+
+// Get sorted scenes by minute
+const highlightScenes = computed(() => {
+  if (!lastMatchResultForViewer.value?.match_events?.scenes) return []
+  return [...lastMatchResultForViewer.value.match_events.scenes].sort((a, b) => a.minute - b.minute)
+})
+
+// Current scene
+const currentHighlightScene = computed(() => {
+  return highlightScenes.value[currentHighlightSceneIndex.value] || null
+})
+
+// Current event within scene
+const currentHighlightEvent = computed(() => {
+  if (!currentHighlightScene.value) return null
+  return currentHighlightScene.value.events[currentHighlightEventIndex.value] || null
+})
+
+// Check if playback is complete
+const highlightComplete = computed(() => {
+  return currentHighlightSceneIndex.value >= highlightScenes.value.length
+})
+
+// Current minute for display
+const currentHighlightMinute = computed(() => {
+  return currentHighlightEvent.value?.minute || 0
+})
+
+// Get player name by ID
+const getHighlightPlayerName = (playerId: number | undefined): string => {
+  if (!playerId) return 'Unknown'
+
+  // Negative IDs are bot players
+  if (playerId < 0) {
+    const botRoles = ['GK', 'DEF', 'DEF', 'MID', 'MID', 'ATT']
+    const botIndex = Math.abs(playerId) - 1
+    return `Bot ${botRoles[botIndex] || 'Player'}`
+  }
+
+  const player = clubStore.players.find(p => p.id === playerId)
+  return player?.position || `Player #${playerId}`
+}
+
+// Format current event as text
+const currentHighlightEventText = computed(() => {
+  const event = currentHighlightEvent.value
+  if (!event) return 'Press Play to start'
+
+  const team = event.team === 'club' ? clubStore.clubName : 'Bot Team'
+
+  switch (event.action) {
+    case 'pass':
+      return `${getHighlightPlayerName(event.from_player_id)} passes to ${getHighlightPlayerName(event.to_player_id)}`
+    case 'shot':
+      return `${getHighlightPlayerName(event.player_id)} shoots!`
+    case 'goal':
+      const scorer = getHighlightPlayerName(event.player_id)
+      return `GOAL! ${scorer} scores!`
+    default:
+      return event.action
+  }
+})
+
+// Get sprite for a player ID
+const getSpriteForPlayer = (playerId: number): AnimatedSprite | undefined => {
+  if (playerId < 0) {
+    // Bot player - find by index
+    const botIndex = Math.abs(playerId) - 1
+    const botSprites = animatedSprites.filter(s => s.team === 'bot')
+    return botSprites[botIndex]
+  }
+  // Club player
+  return animatedSprites.find(s => s.playerId === playerId)
+}
+
+// Get position for a player ID
+const getPositionForPlayer = (playerId: number): { x: number; y: number; z: number } | null => {
+  if (playerId < 0) {
+    const botIndex = Math.abs(playerId) - 1
+    return botPositions[botIndex] || null
+  }
+  // Find the player's position by matching the sprite
+  const sprite = animatedSprites.find(s => s.playerId === playerId)
+  if (sprite) {
+    return sprite.position
+  }
+  return null
+}
+
+// Create ball sprite for highlight animations
+const createBallSprite = () => {
+  if (ballMesh) return // Already created
+
+  // Load ball texture (sprite sheet with 5 frames)
+  ballTexture = textureLoaderRef.load('/sprites/ball_idle.png')
+  ballTexture.colorSpace = THREE.SRGBColorSpace
+  ballTexture.magFilter = THREE.LinearFilter
+  ballTexture.minFilter = THREE.LinearFilter
+  ballTexture.wrapS = THREE.ClampToEdgeWrapping
+  ballTexture.wrapT = THREE.ClampToEdgeWrapping
+
+  // Set up sprite sheet - show first frame (1/5 of width)
+  const frameRatio = 1 / ballFrameCount
+  ballTexture.repeat.set(frameRatio, 1)
+  ballTexture.offset.set(0, 0)
+
+  const ballSize = 0.22 // Size of ball sprite
+  const ballGeometry = new THREE.PlaneGeometry(ballSize, ballSize)
+  const ballMaterial = new THREE.MeshBasicMaterial({
+    map: ballTexture,
+    transparent: true,
+    opacity: 0
+  })
+  ballMesh = new THREE.Mesh(ballGeometry, ballMaterial)
+  ballMesh.position.set(0, 0, 5) // High z to appear on top
+  scene.add(ballMesh)
+}
+
+// Update ball animation frame
+const updateBallAnimation = (deltaTime: number) => {
+  if (!ballTexture || !ballMesh) return
+
+  const material = ballMesh.material as THREE.MeshBasicMaterial
+  if (material.opacity <= 0) return // Don't animate if hidden
+
+  ballAnimationTime += deltaTime
+  if (ballAnimationTime >= ballFrameDuration) {
+    ballAnimationTime = 0
+    ballCurrentFrame = (ballCurrentFrame + 1) % ballFrameCount
+
+    // Update texture offset to show current frame
+    const frameRatio = 1 / ballFrameCount
+    ballTexture.offset.set(ballCurrentFrame * frameRatio, 0)
+  }
+}
+
+// Show ball at a position
+const showBall = (pos: { x: number; y: number }) => {
+  if (!ballMesh) return
+  const material = ballMesh.material as THREE.MeshBasicMaterial
+  material.opacity = 1
+  ballMesh.position.set(pos.x, pos.y, 5)
+}
+
+// Hide ball
+const hideBall = () => {
+  if (!ballMesh) return
+  const material = ballMesh.material as THREE.MeshBasicMaterial
+  material.opacity = 0
+}
+
+// Animate ball from one position to another (stays visible after movement)
+const animateBall = (fromPos: { x: number; y: number }, toPos: { x: number; y: number }, duration: number = 0.5) => {
+  if (!ballMesh) return
+
+  const material = ballMesh.material as THREE.MeshBasicMaterial
+  material.opacity = 1
+  ballMesh.position.set(fromPos.x, fromPos.y, 5)
+
+  gsap.to(ballMesh.position, {
+    x: toPos.x,
+    y: toPos.y,
+    duration,
+    ease: 'power2.out'
+    // Ball stays visible - hideBall() is called after goal
+  })
+}
+
+// Animate sprite movement (subtle movement toward ball/goal)
+const animateSpriteHighlight = (sprite: AnimatedSprite, action: string) => {
+  if (!sprite) return
+
+  // Add a subtle "active" animation
+  const originalY = sprite.position.y
+
+  if (action === 'shot' || action === 'goal') {
+    // Jump animation for shot/goal
+    gsap.to(sprite.mesh.position, {
+      y: originalY + 0.2,
+      duration: 0.15,
+      yoyo: true,
+      repeat: 1,
+      ease: 'power2.out'
+    })
+  } else if (action === 'pass') {
+    // Subtle scale pulse for pass
+    gsap.to(sprite.mesh.scale, {
+      x: 1.1,
+      y: 1.1,
+      duration: 0.2,
+      yoyo: true,
+      repeat: 1,
+      ease: 'power2.out'
+    })
+  }
+}
+
+// Process current highlight event (animate sprites and ball)
+const processHighlightEvent = (event: MatchEvent) => {
+  if (!event) return
+
+  if (event.action === 'pass' && event.from_player_id && event.to_player_id) {
+    const fromPos = getPositionForPlayer(event.from_player_id)
+    const toPos = getPositionForPlayer(event.to_player_id)
+    const fromSprite = getSpriteForPlayer(event.from_player_id)
+
+    if (fromPos && toPos) {
+      animateBall(fromPos, toPos, 0.6)
+    }
+    if (fromSprite) {
+      animateSpriteHighlight(fromSprite, 'pass')
+    }
+  } else if (event.action === 'shot' && event.player_id) {
+    const playerSprite = getSpriteForPlayer(event.player_id)
+    if (playerSprite) {
+      animateSpriteHighlight(playerSprite, 'shot')
+    }
+
+    // Animate ball toward goal
+    const playerPos = getPositionForPlayer(event.player_id)
+    if (playerPos) {
+      const goalPos = event.team === 'club'
+        ? { x: botPositions[0].x, y: botPositions[0].y } // Bot goal
+        : { x: dolphinPositions[5].x, y: dolphinPositions[5].y } // Club goal
+      animateBall(playerPos, goalPos, 0.8)
+    }
+  } else if (event.action === 'goal' && event.player_id) {
+    const playerSprite = getSpriteForPlayer(event.player_id)
+    if (playerSprite) {
+      animateSpriteHighlight(playerSprite, 'goal')
+    }
+
+    // Update running score
+    if (event.team === 'club') {
+      highlightRunningScore.value.club++
+    } else {
+      highlightRunningScore.value.bot++
+    }
+
+    // Hide ball after goal - will reappear at start of next scene
+    setTimeout(() => {
+      hideBall()
+    }, 500)
+  }
+}
+
+// Start highlight playback
+const startHighlightPlayback = () => {
+  if (!lastMatchResultForViewer.value?.match_events?.scenes?.length) return
+
+  if (highlightComplete.value) {
+    // Reset if complete
+    currentHighlightSceneIndex.value = 0
+    currentHighlightEventIndex.value = 0
+    highlightRunningScore.value = { club: 0, bot: 0 }
+  }
+
+  isHighlightMode.value = true
+  highlightPlaying.value = true
+
+  // Make sure bots are visible
+  showBotsWithAnimation()
+
+  // Create ball sprite if needed
+  createBallSprite()
+
+  // Show ball at the first player's position for the current scene
+  const currentScene = lastMatchResultForViewer.value?.match_events?.scenes?.[currentHighlightSceneIndex.value]
+  if (currentScene?.events?.length > 0) {
+    const firstEvent = currentScene.events[0]
+    const playerId = firstEvent.from_player_id || firstEvent.player_id
+    if (playerId) {
+      const pos = getPositionForPlayer(playerId)
+      if (pos) {
+        showBall(pos)
+      }
+    }
+  }
+
+  // Start playback interval
+  highlightPlaybackInterval = setInterval(() => {
+    advanceHighlightPlayback()
+  }, 1500) // 1.5 seconds per event
+}
+
+// Pause highlight playback
+const pauseHighlightPlayback = () => {
+  highlightPlaying.value = false
+  if (highlightPlaybackInterval) {
+    clearInterval(highlightPlaybackInterval)
+    highlightPlaybackInterval = null
+  }
+}
+
+// Advance to next event
+const advanceHighlightPlayback = () => {
+  if (!currentHighlightScene.value) {
+    pauseHighlightPlayback()
+    return
+  }
+
+  // Process current event with animations
+  if (currentHighlightEvent.value) {
+    processHighlightEvent(currentHighlightEvent.value)
+  }
+
+  // Move to next event in current scene
+  if (currentHighlightEventIndex.value < currentHighlightScene.value.events.length - 1) {
+    currentHighlightEventIndex.value++
+  } else {
+    // Move to next scene
+    currentHighlightSceneIndex.value++
+    currentHighlightEventIndex.value = 0
+
+    if (currentHighlightSceneIndex.value >= highlightScenes.value.length) {
+      // Playback complete
+      hideBall()
+      pauseHighlightPlayback()
+    } else {
+      // Show ball at the first player position of the new scene
+      const newScene = highlightScenes.value[currentHighlightSceneIndex.value]
+      if (newScene?.events?.length > 0) {
+        const firstEvent = newScene.events[0]
+        const playerId = firstEvent.from_player_id || firstEvent.player_id
+        if (playerId) {
+          const pos = getPositionForPlayer(playerId)
+          if (pos) {
+            showBall(pos)
+          }
+        }
+      }
+    }
+  }
+}
+
+// Skip to next scene
+const skipHighlightScene = () => {
+  if (currentHighlightSceneIndex.value < highlightScenes.value.length - 1) {
+    // Update score for current scene if not yet counted
+    const scene = currentHighlightScene.value
+    if (scene) {
+      // Check if we haven't counted this goal yet
+      const expectedClubGoals = highlightScenes.value
+        .slice(0, currentHighlightSceneIndex.value + 1)
+        .filter(s => s.team === 'club').length
+      const expectedBotGoals = highlightScenes.value
+        .slice(0, currentHighlightSceneIndex.value + 1)
+        .filter(s => s.team === 'bot').length
+
+      highlightRunningScore.value = { club: expectedClubGoals, bot: expectedBotGoals }
+    }
+    currentHighlightSceneIndex.value++
+    currentHighlightEventIndex.value = 0
+
+    // Show ball at first player position of new scene
+    const newScene = highlightScenes.value[currentHighlightSceneIndex.value]
+    if (newScene?.events?.length > 0) {
+      const firstEvent = newScene.events[0]
+      const playerId = firstEvent.from_player_id || firstEvent.player_id
+      if (playerId) {
+        const pos = getPositionForPlayer(playerId)
+        if (pos) {
+          showBall(pos)
+        }
+      }
+    }
+  } else {
+    // Go to end
+    currentHighlightSceneIndex.value = highlightScenes.value.length
+    highlightRunningScore.value = lastMatchResultForViewer.value?.match_events?.final_score || { club: 0, bot: 0 }
+    hideBall()
+    pauseHighlightPlayback()
+  }
+}
+
+// Close highlight mode
+const closeHighlightMode = () => {
+  pauseHighlightPlayback()
+  isHighlightMode.value = false
+
+  // Hide ball
+  hideBall()
+
+  // Hide bots after a delay
+  botHideTimeout = setTimeout(() => {
+    hideBotsWithAnimation()
+  }, 3000)
+}
+
+// Open highlight mode
+const openHighlightMode = () => {
+  if (!lastMatchResultForViewer.value?.match_events?.scenes?.length) return
+
+  currentHighlightSceneIndex.value = 0
+  currentHighlightEventIndex.value = 0
+  highlightRunningScore.value = { club: 0, bot: 0 }
+  isHighlightMode.value = true
+  highlightPlaying.value = false
 }
 
 // Format task name for display (converts "rest:short:15:0" to "Resting")
@@ -1780,12 +2211,20 @@ const initScene = () => {
   canvasContainer.value.addEventListener('touchend', handleTouchEnd)
 
   // Animation loop
+  let lastTime = 0
   const animate = (time: number) => {
     animationFrameId = requestAnimationFrame(animate)
+
+    // Calculate delta time for ball animation
+    const deltaTime = lastTime ? time - lastTime : 16
+    lastTime = time
 
     animatedSprites.forEach((sprite) => {
       updateSpriteAnimation(sprite, time)
     })
+
+    // Update ball sprite animation
+    updateBallAnimation(deltaTime)
 
     // Animate fog clouds - slow gentle drifting across the field
     const fogClouds = (window as any).__fogClouds as THREE.Sprite[] | undefined
@@ -2273,25 +2712,54 @@ const clubInfo = computed(() => ({
       </div>
     </div>
 
-    <!-- Bottom Actions - MV3 Style -->
-    <div v-if="!isInitializing && !needsClubCreation && clubStore.hasClub" class="absolute bottom-6 left-1/2 -translate-x-1/2 z-20 flex flex-col items-center gap-3 px-6 py-4 border border-white/10 backdrop-blur-md bg-[#0a0812]/80">
-      <Button
-        variant="game"
-        size="game"
-        class="px-8 gap-2 shadow-lg shadow-[#4fd4d4]/20 border border-[#4fd4d4]/30 hover:shadow-xl hover:shadow-[#4fd4d4]/30 transition-all"
-        :disabled="clubStore.loading.match || busyPlayersInfo.hasBusy"
-        @click="openMatchLevelDialog"
-      >
-        <Loader2 v-if="clubStore.loading.match" class="w-4 h-4 animate-spin" />
-        <Clock v-else-if="busyPlayersInfo.hasBusy" class="w-4 h-4" />
-        <Trophy v-else class="w-4 h-4" />
-        <span v-if="busyPlayersInfo.hasBusy">{{ busyPlayersInfo.countdown }}</span>
-        <span v-else>Play Match</span>
-      </Button>
+    <!-- Bottom Actions - MV3 Style (hide when highlight mode is active) -->
+    <div v-if="!isInitializing && !needsClubCreation && clubStore.hasClub && !isHighlightMode" class="absolute bottom-6 left-1/2 -translate-x-1/2 z-20 flex flex-col items-center gap-3 px-6 py-4 border border-white/10 backdrop-blur-md bg-[#0a0812]/80">
+      <div class="flex items-center gap-3">
+        <Button
+          variant="game"
+          size="game"
+          class="px-8 gap-2 shadow-lg shadow-[#4fd4d4]/20 border border-[#4fd4d4]/30 hover:shadow-xl hover:shadow-[#4fd4d4]/30 transition-all"
+          :disabled="clubStore.loading.match || busyPlayersInfo.hasBusy"
+          @click="openMatchLevelDialog"
+        >
+          <Loader2 v-if="clubStore.loading.match" class="w-4 h-4 animate-spin" />
+          <Clock v-else-if="busyPlayersInfo.hasBusy" class="w-4 h-4" />
+          <Trophy v-else class="w-4 h-4" />
+          <span v-if="busyPlayersInfo.hasBusy">{{ busyPlayersInfo.countdown }}</span>
+          <span v-else>Play Match</span>
+        </Button>
+
+        <!-- Watch Highlights Button (shows when last match has events) -->
+        <Button
+          v-if="lastMatchResultForViewer?.match_events?.scenes?.length"
+          variant="game-secondary"
+          size="game"
+          class="gap-2"
+          @click="openHighlightMode"
+        >
+          <PlayCircle class="w-4 h-4" />
+          Highlights
+        </Button>
+      </div>
       <div class="text-white/30 text-[10px] tracking-wider uppercase">
         Tap on a player to interact
       </div>
     </div>
+
+    <!-- Highlight Controller (shows when highlight mode is active) -->
+    <HighlightController
+      v-if="isHighlightMode"
+      :is-playing="highlightPlaying"
+      :current-minute="currentHighlightMinute"
+      :current-score="highlightRunningScore"
+      :club-name="clubStore.clubName"
+      :is-complete="highlightComplete"
+      :current-event-text="currentHighlightEventText"
+      @play="startHighlightPlayback"
+      @pause="pauseHighlightPlayback"
+      @skip="skipHighlightScene"
+      @close="closeHighlightMode"
+    />
 
     <!-- Three.js Canvas -->
     <div
@@ -2643,6 +3111,7 @@ const clubInfo = computed(() => ({
         </div>
       </DialogContent>
     </Dialog>
+
   </div>
 </template>
 

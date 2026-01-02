@@ -1,5 +1,5 @@
 import { defineStore } from 'pinia'
-import { clubApi, type Club, type Player, type TrainingOption, type BotMatchResult } from '@/services/clubApi'
+import { clubApi, type Club, type Player, type TrainingOption, type BotMatchResult, type MatchEvents } from '@/services/clubApi'
 import { useGlobalStore } from '@/stores/index'
 
 interface ClubState {
@@ -92,7 +92,15 @@ export const useClubStore = defineStore('club', {
 
     // Check if any loading is in progress
     isLoading: (state): boolean =>
-      Object.values(state.loading).some(v => v)
+      Object.values(state.loading).some(v => v),
+
+    // Get last match events for replay
+    lastMatchEvents: (state): MatchEvents | null =>
+      state.lastMatchResult?.match_events ?? null,
+
+    // Check if last match has events to show
+    hasMatchEvents: (state): boolean =>
+      !!(state.lastMatchResult?.match_events?.scenes?.length)
   },
 
   actions: {

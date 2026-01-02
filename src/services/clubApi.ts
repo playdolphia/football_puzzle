@@ -46,11 +46,45 @@ export interface RestOption {
   energy_gain: number
 }
 
+// Match Event Types
+export interface MatchEvent {
+  minute: number
+  team: 'club' | 'bot'
+  action: 'pass' | 'shot' | 'goal'
+  player_id?: number
+  from_player_id?: number
+  to_player_id?: number
+  assist_player_id?: number
+  result: 'complete' | 'on_target' | 'scored'
+}
+
+export interface MatchScene {
+  scene_type: 'goal'
+  team: 'club' | 'bot'
+  minute: number
+  events: MatchEvent[]
+}
+
+export interface MatchEvents {
+  mode: 'highlight'
+  final_score: { club: number; bot: number }
+  scenes: MatchScene[]
+}
+
+export interface ClubProgress {
+  xp_gain: number
+  xp_total: number
+  level: number
+}
+
 export interface BotMatchResult {
   result: 'win' | 'loss' | 'draw'
   score: { club: number; bot: number }
   rewards: { xp: number; energy: number; fans: number }
+  bot_level?: number
   players: Player[]
+  match_events?: MatchEvents
+  club_progress?: ClubProgress
 }
 
 export interface LeagueClub {
