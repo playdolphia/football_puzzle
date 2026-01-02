@@ -1,6 +1,51 @@
 import { apiRequest } from '@/utils/api'
 
 // Types
+
+// Hint action types
+export interface HintActionTrain {
+  type: 'train'
+  player_id: number
+  train_type: 'conditioning' | 'finishing' | 'defensive' | 'light' | 'balanced'
+}
+
+export interface HintActionFeed {
+  type: 'feed'
+  player_id: number
+  cost: number
+}
+
+export interface HintActionRest {
+  type: 'rest'
+  player_id: number
+}
+
+export type HintAction = HintActionTrain | HintActionFeed | HintActionRest
+
+// Player hint
+export interface PlayerHint {
+  code: string
+  priority: number
+  text: string
+  action?: HintAction
+}
+
+// Club hint
+export interface ClubHint {
+  code: string
+  priority: number
+  text: string
+  meta?: {
+    threshold?: number
+    count?: number
+  }
+  action?: {
+    type: 'train'
+    train_type: string
+    suggested_player_ids?: number[]
+  }
+}
+
 export interface Player {
   id: number
   position: 'GK' | 'DEF' | 'MID' | 'ATT'
@@ -18,6 +63,7 @@ export interface Player {
   // - null when idle
   current_task: string | null
   task_ends_at: string | null
+  hints?: PlayerHint[]
 }
 
 export interface Club {
@@ -25,9 +71,11 @@ export interface Club {
   user_id?: number
   name: string
   level: number
+  xp?: number
   fans: number
   created_at?: string
   players: Player[]
+  club_hints?: ClubHint[]
 }
 
 export interface TrainingOption {
@@ -44,6 +92,17 @@ export interface RestOption {
   type: 'short' | 'full'
   duration: number
   energy_gain: number
+}
+
+// Feed Options
+export type FeedType = 'protein_shake' | 'pizza' | 'energy_drink' | 'salad' | 'team_meal' | 'burger'
+
+export interface FeedOption {
+  type: FeedType
+  title: string
+  energy_gain: number
+  cost: number
+  description: string
 }
 
 // Match Event Types
@@ -218,11 +277,16 @@ export const clubApi = {
     }, token)
   },
 
+  // Get feed options
+  async getFeedOptions(token: string): Promise<ApiResponse<FeedOption[]>> {
+    return apiRequest('/Club/Feed/Options', { method: 'GET' }, token)
+  },
+
   // Feed players
-  async feedPlayers(playerIds: number[], token: string): Promise<ApiResponse<FeedResult>> {
+  async feedPlayers(playerIds: number[], feedType: FeedType = 'protein_shake', token: string): Promise<ApiResponse<FeedResult>> {
     return apiRequest('/Club/Player/Feed', {
       method: 'POST',
-      body: { player_id: playerIds }
+      body: { player_id: playerIds, feed_type: feedType }
     }, token)
   },
 

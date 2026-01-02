@@ -1,11 +1,12 @@
 import { defineStore } from 'pinia'
-import { clubApi, type Club, type Player, type TrainingOption, type BotMatchResult, type MatchEvents } from '@/services/clubApi'
+import { clubApi, type Club, type Player, type TrainingOption, type BotMatchResult, type MatchEvents, type FeedOption, type FeedType, type ClubHint, type PlayerHint } from '@/services/clubApi'
 import { useGlobalStore } from '@/stores/index'
 
 interface ClubState {
   club: Club | null
   players: Player[]
   trainingOptions: TrainingOption[]
+  feedOptions: FeedOption[]
   lastMatchResult: BotMatchResult | null
   loading: {
     club: boolean
@@ -15,6 +16,7 @@ interface ClubState {
     feed: boolean
     rest: boolean
     trainingOptions: boolean
+    feedOptions: boolean
   }
   error: string | null
 }
@@ -24,6 +26,7 @@ export const useClubStore = defineStore('club', {
     club: null,
     players: [],
     trainingOptions: [],
+    feedOptions: [],
     lastMatchResult: null,
     loading: {
       club: false,
@@ -32,7 +35,8 @@ export const useClubStore = defineStore('club', {
       match: false,
       feed: false,
       rest: false,
-      trainingOptions: false
+      trainingOptions: false,
+      feedOptions: false
     },
     error: null
   }),
@@ -100,7 +104,50 @@ export const useClubStore = defineStore('club', {
 
     // Check if last match has events to show
     hasMatchEvents: (state): boolean =>
-      !!(state.lastMatchResult?.match_events?.scenes?.length)
+      !!(state.lastMatchResult?.match_events?.scenes?.length),
+
+    // Get club hints sorted by priority (highest first)
+    clubHints: (state): ClubHint[] =>
+      (state.club?.club_hints ?? []).sort((a, b) => b.priority - a.priority),
+
+    // Check if there are any club hints
+    hasClubHints: (state): boolean =>
+      !!(state.club?.club_hints?.length),
+
+    // Get all player hints aggregated and sorted by priority
+    allPlayerHints: (state): Array<PlayerHint & { playerId: number; position: string }> => {
+      const hints: Array<PlayerHint & { playerId: number; position: string }> = []
+      state.players.forEach(player => {
+        if (player.hints?.length) {
+          player.hints.forEach(hint => {
+            hints.push({ ...hint, playerId: player.id, position: player.position })
+          })
+        }
+      })
+      return hints.sort((a, b) => b.priority - a.priority)
+    },
+
+    // Get hints for a specific player
+    getPlayerHints: (state) => (playerId: number): PlayerHint[] => {
+      const player = state.players.find(p => p.id === playerId)
+      return (player?.hints ?? []).sort((a, b) => b.priority - a.priority)
+    },
+
+    // Get the highest priority hint (club or player)
+    topHint: (state): (ClubHint | (PlayerHint & { playerId: number })) | null => {
+      const clubHints = state.club?.club_hints ?? []
+      const playerHints: Array<PlayerHint & { playerId: number }> = []
+      state.players.forEach(player => {
+        if (player.hints?.length) {
+          player.hints.forEach(hint => {
+            playerHints.push({ ...hint, playerId: player.id })
+          })
+        }
+      })
+      const allHints = [...clubHints, ...playerHints]
+      if (allHints.length === 0) return null
+      return allHints.sort((a, b) => b.priority - a.priority)[0]
+    }
   },
 
   actions: {
@@ -254,6 +301,23 @@ export const useClubStore = defineStore('club', {
       }
     },
 
+    // Fetch feed options
+    async fetchFeedOptions() {
+      this.loading.feedOptions = true
+      try {
+        const response = await clubApi.getFeedOptions(this.getToken())
+        if (response.ok && response.data) {
+          this.feedOptions = response.data
+          return { ok: true, data: response.data }
+        }
+        return { ok: false, message: response.message || 'Failed to fetch feed options' }
+      } catch (err: any) {
+        return { ok: false, message: err.message || 'Failed to fetch feed options' }
+      } finally {
+        this.loading.feedOptions = false
+      }
+    },
+
     // Train a player
     async trainPlayer(playerId: number, type: 'light' | 'balanced' | 'conditioning' | 'finishing') {
       this.loading.training = true
@@ -318,11 +382,11 @@ export const useClubStore = defineStore('club', {
     },
 
     // Feed players
-    async feedPlayers(playerIds: number[]) {
+    async feedPlayers(playerIds: number[], feedType: FeedType = 'protein_shake') {
       this.loading.feed = true
       this.error = null
       try {
-        const response = await clubApi.feedPlayers(playerIds, this.getToken())
+        const response = await clubApi.feedPlayers(playerIds, feedType, this.getToken())
         if (response.ok && response.data) {
           // Check if there are errors in the response data
           if (response.data.errors && response.data.errors.length > 0) {
@@ -424,6 +488,7 @@ export const useClubStore = defineStore('club', {
       this.club = null
       this.players = []
       this.trainingOptions = []
+      this.feedOptions = []
       this.lastMatchResult = null
       this.error = null
     }

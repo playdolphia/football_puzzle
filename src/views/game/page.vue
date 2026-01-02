@@ -18,7 +18,7 @@ import Loader from '@/components/layouts/Loader.vue'
 import HighlightController from '@/components/layouts/HighlightController.vue'
 import * as THREE from 'three'
 import gsap from 'gsap'
-import type { Player, TrainingOption, BotMatchResult, MatchScene, MatchEvent } from '@/services/clubApi'
+import type { Player, TrainingOption, BotMatchResult, MatchScene, MatchEvent, FeedOption, FeedType } from '@/services/clubApi'
 
 const router = useRouter()
 const globalStore = useGlobalStore()
@@ -35,9 +35,11 @@ const selectedPlayer = ref<Player | null>(null)
 const showPlayerDialog = ref(false)
 const showTrainDialog = ref(false)
 const showRestDialog = ref(false)
+const showFeedDialog = ref(false)
 const showRenameDialog = ref(false)
 const showMatchLevelDialog = ref(false)
 const selectedMatchLevel = ref<1 | 2 | 3>(1)
+const selectedFeedType = ref<FeedType>('protein_shake')
 const newClubName = ref('')
 
 // Confirmation dialog state
@@ -71,6 +73,9 @@ const ballFrameDuration = 100 // ms per frame
 const timerTick = ref(0)
 let dialogTimerInterval: ReturnType<typeof setInterval> | null = null
 let globalTimerInterval: ReturnType<typeof setInterval> | null = null
+let hintCheckInterval: ReturnType<typeof setInterval> | null = null
+const shownHintCodes = ref<Set<string>>(new Set()) // Track shown hints to avoid duplicates
+const HINT_CHECK_INTERVAL = 30000 // 30 seconds
 
 let camera: THREE.OrthographicCamera
 let renderer: THREE.WebGLRenderer
@@ -1070,37 +1075,53 @@ const triggerInstantAnimation = (playerId: number) => {
   })
 }
 
-// Show feed confirmation
-const showFeedConfirmation = () => {
+// Open feed dialog
+const openFeedDialog = () => {
+  showPlayerDialog.value = false
+  // Fetch feed options if not already loaded
+  if (clubStore.feedOptions.length === 0) {
+    clubStore.fetchFeedOptions()
+  }
+  selectedFeedType.value = 'protein_shake' // Reset to default
+  showFeedDialog.value = true
+}
+
+// Show feed confirmation after selecting food type
+const showFeedConfirmation = (feedType: FeedType) => {
   if (!selectedPlayer.value) return
 
   const playerName = selectedPlayer.value.position
+  const feedOption = clubStore.feedOptions.find(o => o.type === feedType)
+  const energyGain = feedOption?.energy_gain ?? 20
+  const cost = feedOption?.cost ?? 5
+  const foodName = feedOption?.title ?? 'Food'
 
   confirmAction.value = {
     type: 'feed',
-    title: 'Feed Player?',
-    description: `Feed ${playerName} to restore energy.`,
-    details: '+20 energy',
-    onConfirm: () => executeFeed()
+    title: `Feed ${foodName}?`,
+    description: `Give ${playerName} a ${foodName.toLowerCase()} to restore energy.`,
+    details: `+${energyGain} energy • ${cost} tokens`,
+    onConfirm: () => executeFeed(feedType)
   }
-  showPlayerDialog.value = false
+  showFeedDialog.value = false
   showConfirmDialog.value = true
 }
 
-// Feed player
-const executeFeed = async () => {
+// Feed player with selected food type
+const executeFeed = async (feedType: FeedType = 'protein_shake') => {
   if (!selectedPlayer.value) return
 
   showConfirmDialog.value = false
 
   const playerId = selectedPlayer.value.id
-  const result = await clubStore.feedPlayers([playerId])
+  const result = await clubStore.feedPlayers([playerId], feedType)
 
   if (result.ok) {
     // Trigger feeding animation
     triggerInstantAnimation(playerId)
+    const feedOption = clubStore.feedOptions.find(o => o.type === feedType)
+    toast.success(`Player fed with ${feedOption?.title ?? 'food'}!`)
     selectedPlayer.value = null
-    toast.success('Player fed!')
   } else {
     toast.error(result.message || 'Failed to feed player')
   }
@@ -1696,6 +1717,59 @@ const stopDialogTimer = () => {
     clearInterval(dialogTimerInterval)
     dialogTimerInterval = null
   }
+}
+
+// Check and display hints via sonner toasts
+const checkAndDisplayHints = async () => {
+  // Refresh club data to get latest hints
+  await clubStore.fetchClub()
+
+  // Get all hints (club + player hints)
+  const clubHints = clubStore.club?.club_hints ?? []
+  const playerHints: Array<{ code: string; text: string; priority: number; playerId?: number }> = []
+
+  clubStore.players.forEach(player => {
+    if (player.hints?.length) {
+      player.hints.forEach(hint => {
+        playerHints.push({ ...hint, playerId: player.id })
+      })
+    }
+  })
+
+  // Combine and sort by priority
+  const allHints = [...clubHints, ...playerHints].sort((a, b) => b.priority - a.priority)
+
+  // Show hints that haven't been shown yet (limit to top 2 to avoid spam)
+  let displayedCount = 0
+  for (const hint of allHints) {
+    if (displayedCount >= 2) break
+
+    const hintKey = `${hint.code}-${'playerId' in hint ? hint.playerId : 'club'}`
+    if (!shownHintCodes.value.has(hintKey)) {
+      shownHintCodes.value.add(hintKey)
+      displayedCount++
+
+      // Determine toast type based on priority
+      if (hint.priority >= 70) {
+        toast.warning(hint.text, { duration: 6000 })
+      } else if (hint.priority >= 50) {
+        toast.info(hint.text, { duration: 5000 })
+      } else {
+        toast(hint.text, { duration: 4000 })
+      }
+    }
+  }
+}
+
+// Get hint for a specific player (for showing in dialogs)
+const getPlayerHint = (playerId: number): string | null => {
+  const player = clubStore.players.find(p => p.id === playerId)
+  if (player?.hints?.length) {
+    // Return highest priority hint
+    const sortedHints = [...player.hints].sort((a, b) => b.priority - a.priority)
+    return sortedHints[0].text
+  }
+  return null
 }
 
 const initScene = () => {
@@ -2560,6 +2634,16 @@ onMounted(async () => {
     await clubStore.fetchPlayers()
   }, PLAYER_SYNC_INTERVAL)
 
+  // Set up hint check interval (checks for new hints every 30s)
+  hintCheckInterval = setInterval(() => {
+    checkAndDisplayHints()
+  }, HINT_CHECK_INTERVAL)
+
+  // Check hints on initial load (after a short delay to let the UI settle)
+  setTimeout(() => {
+    checkAndDisplayHints()
+  }, 2000)
+
   // Start random bot animation scheduler
   scheduleNextBotAnimation()
 })
@@ -2576,6 +2660,9 @@ onUnmounted(() => {
   }
   if (playerSyncInterval) {
     clearInterval(playerSyncInterval)
+  }
+  if (hintCheckInterval) {
+    clearInterval(hintCheckInterval)
   }
   if (botRandomAnimInterval) {
     clearTimeout(botRandomAnimInterval)
@@ -2821,7 +2908,7 @@ const clubInfo = computed(() => ({
               <Dumbbell class="w-5 h-5" />
               <span class="text-[10px]">Train</span>
             </Button>
-            <Button @click="showFeedConfirmation" variant="game" size="game" class="flex-col gap-1 shadow-lg shadow-[#4fd4d4]/20 border border-[#4fd4d4]/30 hover:shadow-xl hover:shadow-[#4fd4d4]/30 transition-all" :disabled="clubStore.loading.feed">
+            <Button @click="openFeedDialog" variant="game" size="game" class="flex-col gap-1 shadow-lg shadow-[#4fd4d4]/20 border border-[#4fd4d4]/30 hover:shadow-xl hover:shadow-[#4fd4d4]/30 transition-all" :disabled="clubStore.loading.feed">
               <Loader2 v-if="clubStore.loading.feed" class="w-5 h-5 animate-spin" />
               <Utensils v-else class="w-5 h-5" />
               <span class="text-[10px]">Feed</span>
@@ -2944,6 +3031,62 @@ const clubInfo = computed(() => ({
           <div class="h-[1px] w-full bg-white/10" />
 
           <Button variant="game-secondary" size="game" @click="showRestDialog = false">
+            Cancel
+          </Button>
+        </div>
+      </DialogContent>
+    </Dialog>
+
+    <!-- Feed Dialog - MV3 Style -->
+    <Dialog v-model:open="showFeedDialog">
+      <DialogContent variant="game" class="max-w-sm">
+        <div class="space-y-6 text-center">
+          <!-- Header -->
+          <div>
+            <h2 class="text-lg font-light text-white tracking-wide">Feed</h2>
+            <p class="text-xs text-white/40 tracking-widest uppercase mt-1">
+              {{ selectedPlayer?.position }}
+            </p>
+          </div>
+
+          <!-- Horizontal line separator -->
+          <div class="h-[1px] w-full bg-white/10" />
+
+          <!-- Loading state -->
+          <div v-if="clubStore.loading.feedOptions" class="flex items-center justify-center gap-2 text-white/60 py-8">
+            <Loader2 class="w-4 h-4 animate-spin" />
+            <span class="text-sm">Loading food options...</span>
+          </div>
+
+          <!-- Feed options grid -->
+          <div v-else class="grid grid-cols-2 gap-3 max-h-[300px] overflow-y-auto">
+            <div
+              v-for="option in clubStore.feedOptions"
+              :key="option.type"
+              class="group py-3 px-3 cursor-pointer transition-colors border border-white/10 rounded-lg hover:bg-white/5 hover:border-[#4fd4d4]/30"
+              @click="showFeedConfirmation(option.type)"
+            >
+              <div class="text-left">
+                <span class="font-medium text-white text-sm group-hover:text-[#4fd4d4] transition-colors">{{ option.title }}</span>
+              </div>
+              <p class="text-[10px] text-white/40 text-left mt-1 line-clamp-2">{{ option.description }}</p>
+              <div class="flex items-center justify-between mt-2 text-[10px]">
+                <span class="text-green-400">+{{ option.energy_gain }} ⚡</span>
+                <span class="text-amber-400">{{ option.cost }} 🪙</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Loading indicator for feed action -->
+          <div v-if="clubStore.loading.feed" class="flex items-center justify-center gap-2 text-white/60">
+            <Loader2 class="w-4 h-4 animate-spin" />
+            <span class="text-sm">Feeding player...</span>
+          </div>
+
+          <!-- Horizontal line separator -->
+          <div class="h-[1px] w-full bg-white/10" />
+
+          <Button variant="game-secondary" size="game" @click="showFeedDialog = false">
             Cancel
           </Button>
         </div>
@@ -3084,6 +3227,14 @@ const clubInfo = computed(() => ({
           <div class="space-y-2">
             <p class="text-sm text-white/70">{{ confirmAction.description }}</p>
             <p v-if="confirmAction.details" class="text-xs text-[#4fd4d4]">{{ confirmAction.details }}</p>
+          </div>
+
+          <!-- Player Hint (if available) -->
+          <div
+            v-if="selectedPlayer && getPlayerHint(selectedPlayer.id)"
+            class="px-3 py-2 bg-amber-500/10 border border-amber-500/20 rounded-lg"
+          >
+            <p class="text-xs text-amber-400">💡 {{ getPlayerHint(selectedPlayer.id) }}</p>
           </div>
 
           <!-- Horizontal line separator -->
