@@ -62,65 +62,74 @@ const styleVars = computed(() => {
 </template>
 
 <style>
-/* MV3 Game Toast Styles */
-.game-toast {
-  background: rgba(10, 8, 18, 0.95) !important;
-  backdrop-filter: blur(12px);
+/* MV3 Game Toast Styles - targeting sonner's data attributes */
+.game-toaster [data-sonner-toast] {
+  background: rgba(10, 8, 18, 0.9) !important;
+  -webkit-backdrop-filter: blur(12px) !important;
+  backdrop-filter: blur(12px) !important;
   border: 1px solid rgba(255, 255, 255, 0.1) !important;
   border-radius: 0 !important;
   padding: 12px 16px !important;
-  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.4) !important;
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.5) !important;
   font-family: inherit;
 }
 
-.game-toast-title {
+.game-toaster [data-sonner-toast][data-type="success"] {
+  border-color: rgba(79, 212, 212, 0.3) !important;
+}
+
+.game-toaster [data-sonner-toast][data-type="error"] {
+  border-color: rgba(251, 113, 133, 0.3) !important;
+}
+
+.game-toaster [data-sonner-toast][data-type="warning"] {
+  border-color: rgba(251, 191, 36, 0.3) !important;
+}
+
+.game-toaster [data-sonner-toast][data-type="info"] {
+  border-color: rgba(96, 165, 250, 0.3) !important;
+}
+
+/* Toast content styling */
+.game-toast-title,
+.game-toaster [data-sonner-toast] [data-title] {
   color: rgba(255, 255, 255, 0.9) !important;
   font-size: 13px !important;
   font-weight: 400 !important;
   letter-spacing: 0.02em;
-  line-height: 1.4;
+  line-height: 1.5;
 }
 
-.game-toast-description {
+.game-toaster [data-sonner-toast][data-type="success"] [data-title] {
+  color: #4fd4d4 !important;
+}
+
+.game-toaster [data-sonner-toast][data-type="error"] [data-title] {
+  color: #fb7185 !important;
+}
+
+.game-toaster [data-sonner-toast][data-type="warning"] [data-title] {
+  color: #fbbf24 !important;
+}
+
+.game-toaster [data-sonner-toast][data-type="info"] [data-title] {
+  color: #60a5fa !important;
+}
+
+.game-toast-description,
+.game-toaster [data-sonner-toast] [data-description] {
   color: rgba(255, 255, 255, 0.6) !important;
   font-size: 12px !important;
   margin-top: 4px;
 }
 
-.game-toast-success {
-  border-color: rgba(79, 212, 212, 0.3) !important;
-}
-
-.game-toast-success .game-toast-title {
-  color: #4fd4d4 !important;
-}
-
-.game-toast-error {
-  border-color: rgba(251, 113, 133, 0.3) !important;
-}
-
-.game-toast-error .game-toast-title {
-  color: #fb7185 !important;
-}
-
-.game-toast-warning {
-  border-color: rgba(251, 191, 36, 0.3) !important;
-}
-
-.game-toast-warning .game-toast-title {
-  color: #fbbf24 !important;
-}
-
-.game-toast-info {
-  border-color: rgba(96, 165, 250, 0.3) !important;
-}
-
-.game-toast-info .game-toast-title {
-  color: #60a5fa !important;
-}
-
 /* Hide default sonner icons for game variant */
 .game-toaster [data-sonner-toast] [data-icon] {
-  display: none;
+  display: none !important;
+}
+
+/* Hide close button for cleaner look */
+.game-toaster [data-sonner-toast] [data-close-button] {
+  display: none !important;
 }
 </style>
