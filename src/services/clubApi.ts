@@ -224,6 +224,11 @@ export interface ApiErrorResponse {
   current?: number
 }
 
+export interface LeagueStart {
+  start: string // Date string e.g. "2026-01-15"
+  countdown: number // Seconds until league starts
+}
+
 // Club API Service
 export const clubApi = {
   // Create a new club
@@ -318,5 +323,10 @@ export const clubApi = {
   // Get league schedule
   async getLeagueSchedule(leagueId: number, token: string): Promise<ApiResponse<{ league: League; matches: LeagueMatch[] }>> {
     return apiRequest(`/Club/League/${leagueId}/Schedule`, { method: 'GET' }, token)
+  },
+
+  // Get league start countdown
+  async getLeagueStart(token: string): Promise<ApiResponse<LeagueStart>> {
+    return apiRequest('/Club/League/Start', { method: 'GET' }, token)
   }
 }

@@ -1,11 +1,11 @@
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useGlobalStore } from '@/stores'
 import { useClubStore } from '@/stores/clubStore'
 import { Button } from '@/components/ui/button'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
-import { AlertCircle, ArrowLeft, Users, HelpCircle } from 'lucide-vue-next'
+import { AlertCircle, ArrowLeft, Users, HelpCircle, Trophy } from 'lucide-vue-next'
 import Loader from '@/components/layouts/Loader.vue'
 import EnergyBar from '@/components/layouts/EnergyBar.vue'
 
@@ -14,6 +14,43 @@ const globalStore = useGlobalStore()
 const clubStore = useClubStore()
 const userData = ref(null)
 const error = ref('')
+
+// League countdown state
+const countdownSeconds = ref(0)
+let countdownInterval: ReturnType<typeof setInterval> | null = null
+
+// Format countdown into days, hours, minutes, seconds
+const formattedCountdown = computed(() => {
+  const total = countdownSeconds.value
+  if (total <= 0) return null
+
+  const days = Math.floor(total / 86400)
+  const hours = Math.floor((total % 86400) / 3600)
+  const minutes = Math.floor((total % 3600) / 60)
+  const seconds = total % 60
+
+  return { days, hours, minutes, seconds }
+})
+
+// Start countdown timer
+const startCountdown = (initialSeconds: number) => {
+  countdownSeconds.value = initialSeconds
+
+  if (countdownInterval) {
+    clearInterval(countdownInterval)
+  }
+
+  countdownInterval = setInterval(() => {
+    if (countdownSeconds.value > 0) {
+      countdownSeconds.value--
+    } else {
+      if (countdownInterval) {
+        clearInterval(countdownInterval)
+        countdownInterval = null
+      }
+    }
+  }, 1000)
+}
 
 // Computed: Get club's average energy or fallback to user energy
 const displayEnergy = computed(() => {
@@ -91,8 +128,14 @@ onMounted(async () => {
         globalStore.getTokenSum(),
         globalStore.getPendingTasks(),
         globalStore.fetchUserEnergy(),
-        clubStore.fetchClub() // Fetch club data to show club energy
+        clubStore.fetchClub(), // Fetch club data to show club energy
+        clubStore.fetchLeagueStart() // Fetch league start countdown
       ])
+
+      // Start countdown if league start data exists
+      if (clubStore.leagueStart?.countdown) {
+        startCountdown(clubStore.leagueStart.countdown)
+      }
     } else {
       if (!token) {
         error.value = 'No authentication token provided'
@@ -135,14 +178,27 @@ onMounted(async () => {
         globalStore.getTokenSum(),
         globalStore.getPendingTasks(),
         globalStore.fetchUserEnergy(),
-        clubStore.fetchClub() // Fetch club data to show club energy
+        clubStore.fetchClub(), // Fetch club data to show club energy
+        clubStore.fetchLeagueStart() // Fetch league start countdown
       ])
+
+      // Start countdown if league start data exists
+      if (clubStore.leagueStart?.countdown) {
+        startCountdown(clubStore.leagueStart.countdown)
+      }
 
       userData.value = tokenData
     }
   } catch (err) {
     error.value = 'Failed to process authentication token'
     console.error('Token processing error:', err)
+  }
+})
+
+onUnmounted(() => {
+  if (countdownInterval) {
+    clearInterval(countdownInterval)
+    countdownInterval = null
   }
 })
 </script>
@@ -215,6 +271,41 @@ onMounted(async () => {
 
           <!-- Energy Display - MV3 Style (shows club energy if available) -->
           <EnergyBar :value="displayEnergy" />
+        </div>
+
+        <!-- League Countdown Banner -->
+        <div v-if="formattedCountdown" class="relative overflow-hidden border border-amber-500/30 bg-amber-500/5 backdrop-blur-sm">
+          <div class="absolute inset-0 bg-gradient-to-r from-amber-500/10 via-transparent to-amber-500/10 animate-pulse"></div>
+          <div class="relative p-4 space-y-3">
+            <div class="flex items-center justify-center gap-2 text-amber-400">
+              <Trophy class="w-4 h-4" />
+              <span class="uppercase tracking-widest text-xs font-medium">League Season Starts In</span>
+            </div>
+            <div class="flex items-center justify-center gap-3">
+              <div class="text-center">
+                <div class="text-2xl font-light text-white tabular-nums">{{ formattedCountdown.days }}</div>
+                <div class="text-[10px] uppercase tracking-wider text-white/40">Days</div>
+              </div>
+              <span class="text-white/30 text-xl">:</span>
+              <div class="text-center">
+                <div class="text-2xl font-light text-white tabular-nums">{{ String(formattedCountdown.hours).padStart(2, '0') }}</div>
+                <div class="text-[10px] uppercase tracking-wider text-white/40">Hours</div>
+              </div>
+              <span class="text-white/30 text-xl">:</span>
+              <div class="text-center">
+                <div class="text-2xl font-light text-white tabular-nums">{{ String(formattedCountdown.minutes).padStart(2, '0') }}</div>
+                <div class="text-[10px] uppercase tracking-wider text-white/40">Mins</div>
+              </div>
+              <span class="text-white/30 text-xl">:</span>
+              <div class="text-center">
+                <div class="text-2xl font-light text-white tabular-nums">{{ String(formattedCountdown.seconds).padStart(2, '0') }}</div>
+                <div class="text-[10px] uppercase tracking-wider text-white/40">Secs</div>
+              </div>
+            </div>
+            <p class="text-center text-white/50 text-xs">
+              Train your players and prepare for the upcoming league!
+            </p>
+          </div>
         </div>
 
         <!-- Main Actions -->

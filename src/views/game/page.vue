@@ -42,6 +42,19 @@ const selectedMatchLevel = ref<1 | 2 | 3>(1)
 const selectedFeedType = ref<FeedType>('protein_shake')
 const newClubName = ref('')
 
+// Helper to get food image path from feed type
+const getFoodImagePath = (feedType: FeedType): string => {
+  const imageMap: Record<FeedType, string> = {
+    protein_shake: '/foods/protein_shake.webp',
+    pizza: '/foods/pizza.webp',
+    energy_drink: '/foods/energy_drink.webp',
+    salad: '/foods/protein_salad.webp',
+    team_meal: '/foods/team_meal.webp',
+    burger: '/foods/burger.webp'
+  }
+  return imageMap[feedType] || '/foods/protein_shake.webp'
+}
+
 // Confirmation dialog state
 const showConfirmDialog = ref(false)
 const confirmAction = ref<{
@@ -1002,76 +1015,108 @@ const executeTraining = async (type: 'light' | 'balanced' | 'conditioning' | 'fi
   confirmAction.value = null
 }
 
-// Trigger a quick animation for instant actions (like feeding)
-const triggerInstantAnimation = (playerId: number) => {
+// Trigger a feeding animation with food sprite overlay
+const triggerFeedAnimation = (playerId: number, feedType: FeedType) => {
   const sprite = animatedSprites.find(s => s.playerId === playerId)
-  if (!sprite) {
-    console.log(`[triggerInstantAnimation] No sprite found for player ${playerId}`)
+  if (!sprite || !scene) {
+    console.log(`[triggerFeedAnimation] No sprite or scene found for player ${playerId}`)
     return
   }
 
-  console.log(`[triggerInstantAnimation] Triggering feeding animation for player ${playerId}`)
+  console.log(`[triggerFeedAnimation] Triggering food animation for player ${playerId} with ${feedType}`)
 
-  // For feeding: play forward, hold on last frame for 3s, then reset to idle
-  const feedAnim = dolphinAnimations.find(a => a.state === 'feeding') || dolphinAnimations[0]
+  // Keep character on frame 0 (idle pose)
+  sprite.currentFrame = 0
+  sprite.looping = false
+  sprite.animationComplete = true
 
-  // Load the animation
-  textureLoaderRef.load(feedAnim.path, (texture) => {
-    texture.colorSpace = THREE.SRGBColorSpace
-    texture.magFilter = THREE.LinearFilter
-    texture.minFilter = THREE.LinearFilter
-    texture.wrapS = THREE.ClampToEdgeWrapping
-    texture.wrapT = THREE.ClampToEdgeWrapping
+  // Get the food image path
+  const foodImagePath = getFoodImagePath(feedType)
 
-    const sheetWidth = texture.image.width
-    const sheetHeight = texture.image.height
-    const frameWidth = sheetWidth / feedAnim.frames
-    const frameAspect = frameWidth / sheetHeight
+  // Load the food texture and create a sprite above the character
+  textureLoaderRef.load(foodImagePath, (foodTexture) => {
+    foodTexture.colorSpace = THREE.SRGBColorSpace
+    foodTexture.magFilter = THREE.LinearFilter
+    foodTexture.minFilter = THREE.LinearFilter
 
-    const frameRatio = 1 / feedAnim.frames
-    texture.repeat.set(frameRatio * 0.98, 0.98)
-    texture.offset.set(0.01 * frameRatio, 0.01)
+    // Create food sprite material with transparency
+    const foodMaterial = new THREE.MeshBasicMaterial({
+      map: foodTexture,
+      transparent: true,
+      opacity: 0,
+      depthTest: false
+    })
 
-    const material = sprite.mesh.material as THREE.MeshBasicMaterial
-    material.map?.dispose()
-    material.map = texture
-    material.needsUpdate = true
+    // Calculate aspect ratio from texture
+    const aspect = foodTexture.image.width / foodTexture.image.height
+    const foodSize = 0.5 // Size of food sprite
+    const foodGeometry = new THREE.PlaneGeometry(foodSize * aspect, foodSize)
+    const foodMesh = new THREE.Mesh(foodGeometry, foodMaterial)
 
-    sprite.mesh.geometry.dispose()
-    sprite.mesh.geometry = new THREE.PlaneGeometry(spriteSize * frameAspect, spriteSize)
+    // Position food sprite starting near the character (lower position)
+    const charPos = sprite.mesh.position
+    foodMesh.position.set(charPos.x, charPos.y + 0.15, charPos.z + 0.5)
+    foodMesh.renderOrder = 100 // Render on top
 
-    sprite.frameCount = feedAnim.frames
-    sprite.currentFrame = 0
-    sprite.animationComplete = false
-    sprite.isReversing = false
-    sprite.holdOnLastFrame = true // Hold on last frame
-    sprite.looping = false
-    sprite.lastFrameTime = performance.now()
-    sprite.currentAnimState = 'feeding'
+    scene.add(foodMesh)
 
-    console.log(`[triggerInstantAnimation] Loaded feeding texture, will hold for 3s then reset`)
-
-    // After animation plays forward and holds for 3 seconds, reset to idle
-    const animDuration = feedAnim.frames * sprite.frameTime
-    const holdDuration = 3000 // 3 seconds
-
-    setTimeout(() => {
-      if (sprite.currentAnimState === 'feeding') {
-        console.log(`[triggerInstantAnimation] Resetting player ${playerId} to idle after feeding`)
-        // Load idle animation
-        const idleAnim = dolphinAnimations[0]
-        updateSpriteTexture(
-          sprite,
-          idleAnim.path,
-          idleAnim.frames,
-          textureLoaderRef,
-          false, // looping
-          false, // holdOnLastFrame
-          'idle',
-          false // shouldReverse
-        )
+    // GSAP animation: scale in, float up, hold, then fade out
+    const tl = gsap.timeline({
+      onComplete: () => {
+        // Clean up food sprite
+        scene.remove(foodMesh)
+        foodGeometry.dispose()
+        foodMaterial.dispose()
+        foodTexture.dispose()
+        console.log(`[triggerFeedAnimation] Food animation complete for player ${playerId}`)
       }
-    }, animDuration + holdDuration)
+    })
+
+    // Start small and invisible
+    foodMesh.scale.set(0, 0, 1)
+
+    // Pop in with scale and fade
+    tl.to(foodMaterial, {
+      opacity: 1,
+      duration: 0.3,
+      ease: 'power2.out'
+    }, 0)
+    tl.to(foodMesh.scale, {
+      x: 1,
+      y: 1,
+      duration: 0.4,
+      ease: 'back.out(2)'
+    }, 0)
+
+    // Float up from lower position to above the character
+    tl.to(foodMesh.position, {
+      y: charPos.y + 0.9,
+      duration: 1.8,
+      ease: 'power1.out'
+    }, 0.2)
+
+    // Pulse scale slightly during hold
+    tl.to(foodMesh.scale, {
+      x: 1.1,
+      y: 1.1,
+      duration: 0.5,
+      ease: 'power1.inOut',
+      yoyo: true,
+      repeat: 2
+    }, 0.5)
+
+    // Fade out and scale down
+    tl.to(foodMaterial, {
+      opacity: 0,
+      duration: 0.4,
+      ease: 'power2.in'
+    }, 2.5)
+    tl.to(foodMesh.scale, {
+      x: 0.5,
+      y: 0.5,
+      duration: 0.4,
+      ease: 'power2.in'
+    }, 2.5)
   })
 }
 
@@ -1117,8 +1162,8 @@ const executeFeed = async (feedType: FeedType = 'protein_shake') => {
   const result = await clubStore.feedPlayers([playerId], feedType)
 
   if (result.ok) {
-    // Trigger feeding animation
-    triggerInstantAnimation(playerId)
+    // Trigger food sprite animation above the character
+    triggerFeedAnimation(playerId, feedType)
     const feedOption = clubStore.feedOptions.find(o => o.type === feedType)
     toast.success(`Player fed with ${feedOption?.title ?? 'food'}!`)
     selectedPlayer.value = null
@@ -3059,18 +3104,26 @@ const clubInfo = computed(() => ({
           </div>
 
           <!-- Feed options grid -->
-          <div v-else class="grid grid-cols-2 gap-3 max-h-[300px] overflow-y-auto">
+          <div v-else class="grid grid-cols-2 gap-3 max-h-[340px] overflow-y-auto">
             <div
               v-for="option in clubStore.feedOptions"
               :key="option.type"
-              class="group py-3 px-3 cursor-pointer transition-colors border border-white/10 rounded-lg hover:bg-white/5 hover:border-[#4fd4d4]/30"
+              class="group py-3 px-3 cursor-pointer transition-all border border-white/10 hover:bg-white/5 hover:border-[#4fd4d4]/30 hover:scale-[1.02]"
               @click="showFeedConfirmation(option.type)"
             >
-              <div class="text-left">
+              <!-- Food Image -->
+              <div class="flex justify-center mb-2">
+                <img
+                  :src="getFoodImagePath(option.type)"
+                  :alt="option.title"
+                  class="w-14 h-14 object-contain group-hover:scale-110 transition-transform duration-200"
+                />
+              </div>
+              <div class="text-center">
                 <span class="font-medium text-white text-sm group-hover:text-[#4fd4d4] transition-colors">{{ option.title }}</span>
               </div>
-              <p class="text-[10px] text-white/40 text-left mt-1 line-clamp-2">{{ option.description }}</p>
-              <div class="flex items-center justify-between mt-2 text-[10px]">
+              <p class="text-[10px] text-white/40 text-center mt-1 line-clamp-2">{{ option.description }}</p>
+              <div class="flex items-center justify-center gap-3 mt-2 text-[10px]">
                 <span class="text-green-400">+{{ option.energy_gain }} ⚡</span>
                 <span class="text-amber-400">{{ option.cost }} 🪙</span>
               </div>

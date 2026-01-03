@@ -1,5 +1,5 @@
 import { defineStore } from 'pinia'
-import { clubApi, type Club, type Player, type TrainingOption, type BotMatchResult, type MatchEvents, type FeedOption, type FeedType, type ClubHint, type PlayerHint } from '@/services/clubApi'
+import { clubApi, type Club, type Player, type TrainingOption, type BotMatchResult, type MatchEvents, type FeedOption, type FeedType, type ClubHint, type PlayerHint, type LeagueStart } from '@/services/clubApi'
 import { useGlobalStore } from '@/stores/index'
 
 interface ClubState {
@@ -8,6 +8,7 @@ interface ClubState {
   trainingOptions: TrainingOption[]
   feedOptions: FeedOption[]
   lastMatchResult: BotMatchResult | null
+  leagueStart: LeagueStart | null
   loading: {
     club: boolean
     players: boolean
@@ -17,6 +18,7 @@ interface ClubState {
     rest: boolean
     trainingOptions: boolean
     feedOptions: boolean
+    leagueStart: boolean
   }
   error: string | null
 }
@@ -28,6 +30,7 @@ export const useClubStore = defineStore('club', {
     trainingOptions: [],
     feedOptions: [],
     lastMatchResult: null,
+    leagueStart: null,
     loading: {
       club: false,
       players: false,
@@ -36,7 +39,8 @@ export const useClubStore = defineStore('club', {
       feed: false,
       rest: false,
       trainingOptions: false,
-      feedOptions: false
+      feedOptions: false,
+      leagueStart: false
     },
     error: null
   }),
@@ -483,6 +487,23 @@ export const useClubStore = defineStore('club', {
       })
     },
 
+    // Fetch league start countdown
+    async fetchLeagueStart() {
+      this.loading.leagueStart = true
+      try {
+        const response = await clubApi.getLeagueStart(this.getToken())
+        if (response.ok && response.data) {
+          this.leagueStart = response.data
+          return { ok: true, data: response.data }
+        }
+        return { ok: false, message: response.message || 'Failed to fetch league start' }
+      } catch (err: any) {
+        return { ok: false, message: err.message || 'Failed to fetch league start' }
+      } finally {
+        this.loading.leagueStart = false
+      }
+    },
+
     // Reset store state
     reset() {
       this.club = null
@@ -490,6 +511,7 @@ export const useClubStore = defineStore('club', {
       this.trainingOptions = []
       this.feedOptions = []
       this.lastMatchResult = null
+      this.leagueStart = null
       this.error = null
     }
   }
