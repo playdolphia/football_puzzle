@@ -136,6 +136,15 @@ export interface ClubProgress {
   level: number
 }
 
+// Match Strategy Types
+export type MatchStrategy = 'attacking' | 'defensive' | 'balanced'
+
+export interface BotMatchRequest {
+  level?: 1 | 2 | 3
+  club_strategy?: MatchStrategy
+  bot_strategy?: MatchStrategy
+}
+
 export interface BotMatchResult {
   result: 'win' | 'loss' | 'draw'
   score: { club: number; bot: number }
@@ -275,10 +284,10 @@ export const clubApi = {
   },
 
   // Play bot match
-  async playBotMatch(level: 1 | 2 | 3, token: string): Promise<ApiResponse<BotMatchResult>> {
+  async playBotMatch(request: BotMatchRequest, token: string): Promise<ApiResponse<BotMatchResult>> {
     return apiRequest('/Club/Match/Bot', {
       method: 'POST',
-      body: { level }
+      body: request
     }, token)
   },
 

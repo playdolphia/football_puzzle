@@ -19,7 +19,7 @@ import HighlightController from '@/components/layouts/HighlightController.vue'
 import NotificationCenter from '@/components/layouts/NotificationCenter.vue'
 import * as THREE from 'three'
 import gsap from 'gsap'
-import type { Player, TrainingOption, BotMatchResult, MatchScene, MatchEvent, FeedOption, FeedType } from '@/services/clubApi'
+import type { Player, TrainingOption, BotMatchResult, MatchScene, MatchEvent, FeedOption, FeedType, MatchStrategy } from '@/services/clubApi'
 
 const router = useRouter()
 const globalStore = useGlobalStore()
@@ -41,6 +41,8 @@ const showFeedDialog = ref(false)
 const showRenameDialog = ref(false)
 const showMatchLevelDialog = ref(false)
 const selectedMatchLevel = ref<1 | 2 | 3>(1)
+const selectedClubStrategy = ref<MatchStrategy>('balanced')
+const selectedBotStrategy = ref<MatchStrategy>('balanced')
 const selectedFeedType = ref<FeedType>('protein_shake')
 const newClubName = ref('')
 
@@ -1229,6 +1231,8 @@ const openMatchLevelDialog = () => {
     return // Button should be disabled, but safety check
   }
   selectedMatchLevel.value = 1
+  selectedClubStrategy.value = 'balanced'
+  selectedBotStrategy.value = 'balanced'
   showMatchLevelDialog.value = true
 }
 
@@ -1236,12 +1240,13 @@ const openMatchLevelDialog = () => {
 const showMatchConfirmation = (level: 1 | 2 | 3) => {
   const difficulties = { 1: 'Easy', 2: 'Medium', 3: 'Hard' }
   const difficultyName = difficulties[level]
+  const strategyLabels: Record<MatchStrategy, string> = { attacking: 'Attacking', defensive: 'Defensive', balanced: 'Balanced' }
 
   confirmAction.value = {
     type: 'match',
     title: 'Start Match?',
     description: `Play a ${difficultyName} match against bot opponents.`,
-    details: level === 1 ? 'Lower rewards' : level === 2 ? 'Better rewards' : 'Maximum rewards',
+    details: `Your team: ${strategyLabels[selectedClubStrategy.value]} · Bot: ${strategyLabels[selectedBotStrategy.value]}`,
     onConfirm: () => executePlayBotMatch(level)
   }
   showMatchLevelDialog.value = false
@@ -1261,7 +1266,11 @@ const executePlayBotMatch = async (level: 1 | 2 | 3) => {
   // Show bots with drop animation
   showBotsWithAnimation()
 
-  const result = await clubStore.playBotMatch(level)
+  const result = await clubStore.playBotMatch({
+    level,
+    club_strategy: selectedClubStrategy.value,
+    bot_strategy: selectedBotStrategy.value
+  })
 
   if (result.ok && result.data) {
     const matchResult = result.data
@@ -3170,16 +3179,61 @@ const clubInfo = computed(() => ({
         <div class="space-y-6 text-center">
           <!-- Header -->
           <div>
-            <h2 class="text-lg font-light text-white tracking-wide">Select Difficulty</h2>
+            <h2 class="text-lg font-light text-white tracking-wide">Match Setup</h2>
             <p class="text-xs text-white/40 tracking-widest uppercase mt-1">
-              Choose your opponent level
+              Choose difficulty and strategy
             </p>
           </div>
 
           <!-- Horizontal line separator -->
           <div class="h-[1px] w-full bg-white/10" />
 
+          <!-- Strategy Selection -->
+          <div class="space-y-4">
+            <!-- Club Strategy -->
+            <div class="text-left">
+              <label class="text-xs text-white/60 uppercase tracking-wider mb-2 block">Your Strategy</label>
+              <div class="grid grid-cols-3 gap-2">
+                <button
+                  v-for="strategy in (['attacking', 'balanced', 'defensive'] as const)"
+                  :key="strategy"
+                  class="py-2 px-3 text-xs rounded-lg border transition-all"
+                  :class="selectedClubStrategy === strategy
+                    ? 'bg-[#4fd4d4]/20 border-[#4fd4d4] text-[#4fd4d4]'
+                    : 'border-white/10 text-white/60 hover:border-white/30 hover:text-white'"
+                  @click="selectedClubStrategy = strategy"
+                >
+                  {{ strategy.charAt(0).toUpperCase() + strategy.slice(1) }}
+                </button>
+              </div>
+            </div>
+
+            <!-- Bot Strategy -->
+            <div class="text-left">
+              <label class="text-xs text-white/60 uppercase tracking-wider mb-2 block">Bot Strategy</label>
+              <div class="grid grid-cols-3 gap-2">
+                <button
+                  v-for="strategy in (['attacking', 'balanced', 'defensive'] as const)"
+                  :key="strategy"
+                  class="py-2 px-3 text-xs rounded-lg border transition-all"
+                  :class="selectedBotStrategy === strategy
+                    ? 'bg-rose-500/20 border-rose-500 text-rose-400'
+                    : 'border-white/10 text-white/60 hover:border-white/30 hover:text-white'"
+                  @click="selectedBotStrategy = strategy"
+                >
+                  {{ strategy.charAt(0).toUpperCase() + strategy.slice(1) }}
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <!-- Horizontal line separator -->
+          <div class="h-[1px] w-full bg-white/10" />
+
+          <!-- Difficulty Selection -->
           <div class="space-y-3">
+            <label class="text-xs text-white/60 uppercase tracking-wider block">Difficulty</label>
+
             <!-- Level 1 - Easy -->
             <div
               class="group py-4 px-4 cursor-pointer transition-colors border border-white/10 rounded-lg hover:bg-white/5 hover:border-[#4fd4d4]/30"

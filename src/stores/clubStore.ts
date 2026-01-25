@@ -1,5 +1,5 @@
 import { defineStore } from 'pinia'
-import { clubApi, type Club, type Player, type TrainingOption, type BotMatchResult, type MatchEvents, type FeedOption, type FeedType, type ClubHint, type PlayerHint, type LeagueStart } from '@/services/clubApi'
+import { clubApi, type Club, type Player, type TrainingOption, type BotMatchResult, type BotMatchRequest, type MatchStrategy, type MatchEvents, type FeedOption, type FeedType, type ClubHint, type PlayerHint, type LeagueStart } from '@/services/clubApi'
 import { useGlobalStore } from '@/stores/index'
 
 interface ClubState {
@@ -353,11 +353,11 @@ export const useClubStore = defineStore('club', {
     },
 
     // Play bot match
-    async playBotMatch(level: 1 | 2 | 3 = 1) {
+    async playBotMatch(request: BotMatchRequest = {}) {
       this.loading.match = true
       this.error = null
       try {
-        const response = await clubApi.playBotMatch(level, this.getToken())
+        const response = await clubApi.playBotMatch(request, this.getToken())
         if (response.ok && response.data) {
           this.lastMatchResult = response.data
           // Update players with new stats
