@@ -14,14 +14,15 @@ import { Checkbox } from '@/components/ui/checkbox'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Zap, Sun, Moon, Eye, ExternalLink } from 'lucide-vue-next'
-import { toast } from 'vue-sonner'
 import { useColorMode } from '@vueuse/core'
 import { useGlobalStore } from '@/stores'
+import { useNotificationStore } from '@/stores/notificationStore'
 
 const router = useRouter()
 const isOpen = ref(false)
 const colorMode = useColorMode()
 const globalStore = useGlobalStore()
+const notificationStore = useNotificationStore()
 
 const currentTheme = computed(() => {
   const tg = (window as any)?.Telegram?.WebApp
@@ -42,15 +43,15 @@ const setTheme = (theme: 'light' | 'dark') => {
     if (tg) {
       tg.colorScheme = theme
       tg.__mockTriggerEvent?.('themeChanged')
-      toast.success(`Theme changed to ${theme}`)
+      notificationStore.success(`Theme changed to ${theme}`)
     } else {
       // Fallback to regular color mode when Telegram WebApp is not available
       colorMode.value = theme
-      toast.success(`Theme changed to ${theme}`)
+      notificationStore.success(`Theme changed to ${theme}`)
     }
   } catch (error) {
     console.error('Failed to change theme:', error)
-    toast.error('Failed to change theme')
+    notificationStore.error('Failed to change theme')
   }
 }
 
@@ -58,10 +59,10 @@ const toggleAdminSimulation = () => {
   try {
     globalStore.toggleAdminSimulation()
     const newState = globalStore.getAdminSimulationState()
-    toast.success(newState ? 'Now viewing as non-admin' : 'Restored admin view')
+    notificationStore.success(newState ? 'Now viewing as non-admin' : 'Restored admin view')
   } catch (error) {
     console.error('Failed to toggle admin simulation:', error)
-    toast.error('Failed to toggle admin simulation')
+    notificationStore.error('Failed to toggle admin simulation')
   }
 }
 

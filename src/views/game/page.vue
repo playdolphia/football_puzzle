@@ -10,12 +10,13 @@ import {
 } from '@/components/ui/dialog'
 import { ArrowLeft, Dumbbell, Utensils, Zap, Clock, Loader2, Trophy, Plus, BedDouble, Pencil, PlayCircle } from 'lucide-vue-next'
 import { Input } from '@/components/ui/input'
-import { toast } from 'vue-sonner'
+import { useNotificationStore } from '@/stores/notificationStore'
 import StatBox from '@/components/layouts/StatBox.vue'
 import EnergyBar from '@/components/layouts/EnergyBar.vue'
 import PositionBadge from '@/components/layouts/PositionBadge.vue'
 import Loader from '@/components/layouts/Loader.vue'
 import HighlightController from '@/components/layouts/HighlightController.vue'
+import NotificationCenter from '@/components/layouts/NotificationCenter.vue'
 import * as THREE from 'three'
 import gsap from 'gsap'
 import type { Player, TrainingOption, BotMatchResult, MatchScene, MatchEvent, FeedOption, FeedType } from '@/services/clubApi'
@@ -23,6 +24,7 @@ import type { Player, TrainingOption, BotMatchResult, MatchScene, MatchEvent, Fe
 const router = useRouter()
 const globalStore = useGlobalStore()
 const clubStore = useClubStore()
+const notificationStore = useNotificationStore()
 
 const canvasContainer = ref<HTMLDivElement | null>(null)
 const isInitializing = ref(true)
@@ -87,7 +89,6 @@ const timerTick = ref(0)
 let dialogTimerInterval: ReturnType<typeof setInterval> | null = null
 let globalTimerInterval: ReturnType<typeof setInterval> | null = null
 let hintCheckInterval: ReturnType<typeof setInterval> | null = null
-const shownHintCodes = ref<Set<string>>(new Set()) // Track shown hints to avoid duplicates
 const HINT_CHECK_INTERVAL = 30000 // 30 seconds
 
 let camera: THREE.OrthographicCamera
@@ -365,7 +366,7 @@ const openRenameDialog = () => {
 // Handle rename club
 const handleRenameClub = async () => {
   if (!newClubName.value.trim()) {
-    toast.error('Please enter a club name')
+    notificationStore.error('Please enter a club name')
     return
   }
 
@@ -373,9 +374,9 @@ const handleRenameClub = async () => {
 
   if (result.ok) {
     showRenameDialog.value = false
-    toast.success('Club name updated!')
+    notificationStore.success('Club name updated!')
   } else {
-    toast.error(result.message || 'Failed to update club name')
+    notificationStore.error(result.message || 'Failed to update club name')
   }
 }
 
@@ -1004,12 +1005,12 @@ const executeTraining = async (type: 'light' | 'balanced' | 'conditioning' | 'fi
 
   if (result.ok) {
     selectedPlayer.value = null
-    toast.success('Training started!')
+    notificationStore.success('Training started!')
     // Trigger animation update after Vue processes the state change
     await nextTick()
     updatePlayerAnimations()
   } else {
-    toast.error(result.message || 'Failed to start training')
+    notificationStore.error(result.message || 'Failed to start training')
   }
 
   confirmAction.value = null
@@ -1165,10 +1166,10 @@ const executeFeed = async (feedType: FeedType = 'protein_shake') => {
     // Trigger food sprite animation above the character
     triggerFeedAnimation(playerId, feedType)
     const feedOption = clubStore.feedOptions.find(o => o.type === feedType)
-    toast.success(`Player fed with ${feedOption?.title ?? 'food'}!`)
+    notificationStore.success(`Player fed with ${feedOption?.title ?? 'food'}!`)
     selectedPlayer.value = null
   } else {
-    toast.error(result.message || 'Failed to feed player')
+    notificationStore.error(result.message || 'Failed to feed player')
   }
 
   confirmAction.value = null
@@ -1210,12 +1211,12 @@ const executeRest = async (type: 'short' | 'full') => {
 
   if (result.ok) {
     selectedPlayer.value = null
-    toast.success('Player is now resting!')
+    notificationStore.success('Player is now resting!')
     // Trigger animation update after Vue processes the state change
     await nextTick()
     updatePlayerAnimations()
   } else {
-    toast.error(result.message || 'Failed to rest player')
+    notificationStore.error(result.message || 'Failed to rest player')
   }
 
   confirmAction.value = null
@@ -1272,19 +1273,19 @@ const executePlayBotMatch = async (level: 1 | 2 | 3) => {
     // Show match result - normalize result string to lowercase for comparison
     const normalizedResult = matchResult.result?.toLowerCase()
     if (normalizedResult === 'win') {
-      toast.success(`Victory! ${matchResult.score.club} - ${matchResult.score.bot}`)
+      notificationStore.success(`Victory! ${matchResult.score.club} - ${matchResult.score.bot}`)
     } else if (normalizedResult === 'loss' || normalizedResult === 'lose') {
-      toast.error(`Defeat! ${matchResult.score.club} - ${matchResult.score.bot}`)
+      notificationStore.error(`Defeat! ${matchResult.score.club} - ${matchResult.score.bot}`)
     } else if (normalizedResult === 'draw') {
-      toast.info(`Draw! ${matchResult.score.club} - ${matchResult.score.bot}`)
+      notificationStore.info(`Draw! ${matchResult.score.club} - ${matchResult.score.bot}`)
     } else {
       // Fallback: determine result from score comparison
       if (matchResult.score.club > matchResult.score.bot) {
-        toast.success(`Victory! ${matchResult.score.club} - ${matchResult.score.bot}`)
+        notificationStore.success(`Victory! ${matchResult.score.club} - ${matchResult.score.bot}`)
       } else if (matchResult.score.club < matchResult.score.bot) {
-        toast.error(`Defeat! ${matchResult.score.club} - ${matchResult.score.bot}`)
+        notificationStore.error(`Defeat! ${matchResult.score.club} - ${matchResult.score.bot}`)
       } else {
-        toast.info(`Draw! ${matchResult.score.club} - ${matchResult.score.bot}`)
+        notificationStore.info(`Draw! ${matchResult.score.club} - ${matchResult.score.bot}`)
       }
     }
 
@@ -1304,7 +1305,7 @@ const executePlayBotMatch = async (level: 1 | 2 | 3) => {
       }, 10000)
     }
   } else {
-    toast.error(result.message || 'Failed to start match')
+    notificationStore.error(result.message || 'Failed to start match')
     // Hide bots immediately on error
     hideBotsWithAnimation()
   }
@@ -1764,46 +1765,11 @@ const stopDialogTimer = () => {
   }
 }
 
-// Check and display hints via sonner toasts
+// Check for new hints (updates clubStore which NotificationCenter reads)
 const checkAndDisplayHints = async () => {
   // Refresh club data to get latest hints
+  // NotificationCenter will automatically show badge updates
   await clubStore.fetchClub()
-
-  // Get all hints (club + player hints)
-  const clubHints = clubStore.club?.club_hints ?? []
-  const playerHints: Array<{ code: string; text: string; priority: number; playerId?: number }> = []
-
-  clubStore.players.forEach(player => {
-    if (player.hints?.length) {
-      player.hints.forEach(hint => {
-        playerHints.push({ ...hint, playerId: player.id })
-      })
-    }
-  })
-
-  // Combine and sort by priority
-  const allHints = [...clubHints, ...playerHints].sort((a, b) => b.priority - a.priority)
-
-  // Show hints that haven't been shown yet (limit to top 2 to avoid spam)
-  let displayedCount = 0
-  for (const hint of allHints) {
-    if (displayedCount >= 2) break
-
-    const hintKey = `${hint.code}-${'playerId' in hint ? hint.playerId : 'club'}`
-    if (!shownHintCodes.value.has(hintKey)) {
-      shownHintCodes.value.add(hintKey)
-      displayedCount++
-
-      // Determine toast type based on priority
-      if (hint.priority >= 70) {
-        toast.warning(hint.text, { duration: 6000 })
-      } else if (hint.priority >= 50) {
-        toast.info(hint.text, { duration: 5000 })
-      } else {
-        toast(hint.text, { duration: 4000 })
-      }
-    }
-  }
 }
 
 // Get hint for a specific player (for showing in dialogs)
@@ -2842,6 +2808,9 @@ const clubInfo = computed(() => ({
           </span>
         </div>
       </div>
+
+      <!-- Notification Center -->
+      <NotificationCenter />
     </div>
 
     <!-- Bottom Actions - MV3 Style (hide when highlight mode is active) -->
