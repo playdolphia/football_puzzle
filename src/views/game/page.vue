@@ -3,6 +3,7 @@ import { ref, computed, onMounted, onUnmounted, watch, nextTick } from 'vue'
 import { useRouter } from 'vue-router'
 import { useGlobalStore } from '@/stores'
 import { useClubStore } from '@/stores/clubStore'
+import { useLeagueStore } from '@/stores/leagueStore'
 import { Button } from '@/components/ui/button'
 import {
   Dialog,
@@ -17,6 +18,10 @@ import PositionBadge from '@/components/layouts/PositionBadge.vue'
 import Loader from '@/components/layouts/Loader.vue'
 import HighlightController from '@/components/layouts/HighlightController.vue'
 import NotificationCenter from '@/components/layouts/NotificationCenter.vue'
+import ActionBar from '@/components/layouts/ActionBar.vue'
+import JoinLeagueDialog from '@/components/league/JoinLeagueDialog.vue'
+import LeagueTableDialog from '@/components/league/LeagueTableDialog.vue'
+import LeagueScheduleDialog from '@/components/league/LeagueScheduleDialog.vue'
 import * as THREE from 'three'
 import gsap from 'gsap'
 import type { Player, TrainingOption, BotMatchResult, MatchScene, MatchEvent, FeedOption, FeedType, MatchStrategy } from '@/services/clubApi'
@@ -24,6 +29,7 @@ import type { Player, TrainingOption, BotMatchResult, MatchScene, MatchEvent, Fe
 const router = useRouter()
 const globalStore = useGlobalStore()
 const clubStore = useClubStore()
+const leagueStore = useLeagueStore()
 const notificationStore = useNotificationStore()
 
 const canvasContainer = ref<HTMLDivElement | null>(null)
@@ -40,6 +46,9 @@ const showRestDialog = ref(false)
 const showFeedDialog = ref(false)
 const showRenameDialog = ref(false)
 const showMatchLevelDialog = ref(false)
+const showJoinLeagueDialog = ref(false)
+const showLeagueTableDialog = ref(false)
+const showLeagueScheduleDialog = ref(false)
 const selectedMatchLevel = ref<1 | 2 | 3>(1)
 const selectedClubStrategy = ref<MatchStrategy>('balanced')
 const selectedBotStrategy = ref<MatchStrategy>('balanced')
@@ -1251,6 +1260,44 @@ const showMatchConfirmation = (level: 1 | 2 | 3) => {
   }
   showMatchLevelDialog.value = false
   showConfirmDialog.value = true
+}
+
+// Open join league dialog
+const openJoinLeagueDialog = async () => {
+  showJoinLeagueDialog.value = true
+  await leagueStore.fetchAvailableLeagues()
+}
+
+// Open league table dialog
+const openLeagueTableDialog = async () => {
+  if (!leagueStore.isInLeague) return
+  showLeagueTableDialog.value = true
+  await leagueStore.fetchLeagueTable()
+}
+
+// Open league schedule dialog
+const openLeagueScheduleDialog = async () => {
+  if (!leagueStore.isInLeague) return
+  showLeagueScheduleDialog.value = true
+  await leagueStore.fetchLeagueSchedule()
+}
+
+// Handle watching league match highlights
+const handleWatchLeagueHighlights = (matchId: number) => {
+  // Close schedule dialog and open highlight mode with league match events
+  showLeagueScheduleDialog.value = false
+
+  if (leagueStore.currentMatchEvents) {
+    // Store the match events for the highlight viewer
+    lastMatchResultForViewer.value = {
+      result: 'draw', // Not relevant for league highlights
+      score: leagueStore.currentMatchEvents.final_score,
+      rewards: { xp: 0, energy: 0, fans: 0 },
+      players: [],
+      match_events: leagueStore.currentMatchEvents
+    }
+    openHighlightMode()
+  }
 }
 
 // Play bot match with selected level
@@ -2636,6 +2683,9 @@ onMounted(async () => {
   // Fetch training options
   clubStore.fetchTrainingOptions()
 
+  // Fetch league membership status
+  leagueStore.fetchMyLeague()
+
   // Initialize scene
   initScene()
 
@@ -2823,25 +2873,21 @@ const clubInfo = computed(() => ({
     </div>
 
     <!-- Bottom Actions - MV3 Style (hide when highlight mode is active) -->
-    <div v-if="!isInitializing && !needsClubCreation && clubStore.hasClub && !isHighlightMode" class="absolute bottom-6 left-1/2 -translate-x-1/2 z-20 flex flex-col items-center gap-3 px-6 py-4 border border-white/10 backdrop-blur-md bg-[#0a0812]/80">
-      <div class="flex items-center gap-3">
-        <Button
-          variant="game"
-          size="game"
-          class="px-8 gap-2 shadow-lg shadow-[#4fd4d4]/20 border border-[#4fd4d4]/30 hover:shadow-xl hover:shadow-[#4fd4d4]/30 transition-all"
-          :disabled="clubStore.loading.match || busyPlayersInfo.hasBusy"
-          @click="openMatchLevelDialog"
-        >
-          <Loader2 v-if="clubStore.loading.match" class="w-4 h-4 animate-spin" />
-          <Clock v-else-if="busyPlayersInfo.hasBusy" class="w-4 h-4" />
-          <Trophy v-else class="w-4 h-4" />
-          <span v-if="busyPlayersInfo.hasBusy">{{ busyPlayersInfo.countdown }}</span>
-          <span v-else>Play Match</span>
-        </Button>
+    <div v-if="!isInitializing && !needsClubCreation && clubStore.hasClub && !isHighlightMode" class="absolute bottom-6 left-0 right-0 mx-auto z-20 w-[calc(100%-2rem)] max-w-md">
+      <ActionBar
+        :is-in-league="leagueStore.isInLeague"
+        :loading="{ match: clubStore.loading.match, join: leagueStore.loading.join }"
+        :disabled="busyPlayersInfo.hasBusy"
+        :busy-countdown="busyPlayersInfo.hasBusy ? busyPlayersInfo.countdown : null"
+        @play-bot="openMatchLevelDialog"
+        @join-league="openJoinLeagueDialog"
+        @open-schedule="openLeagueScheduleDialog"
+        @open-table="openLeagueTableDialog"
+      />
 
-        <!-- Watch Highlights Button (shows when last match has events) -->
+      <!-- Watch Highlights Button (shows when last match has events) -->
+      <div v-if="lastMatchResultForViewer?.match_events?.scenes?.length" class="flex justify-center mt-3">
         <Button
-          v-if="lastMatchResultForViewer?.match_events?.scenes?.length"
           variant="game-secondary"
           size="game"
           class="gap-2"
@@ -2851,7 +2897,8 @@ const clubInfo = computed(() => ({
           Highlights
         </Button>
       </div>
-      <div class="text-white/30 text-[10px] tracking-wider uppercase">
+
+      <div class="text-white/30 text-[10px] tracking-wider uppercase text-center mt-3">
         Tap on a player to interact
       </div>
     </div>
@@ -3338,6 +3385,23 @@ const clubInfo = computed(() => ({
         </div>
       </DialogContent>
     </Dialog>
+
+    <!-- Join League Dialog -->
+    <JoinLeagueDialog
+      v-model:open="showJoinLeagueDialog"
+      @joined="showJoinLeagueDialog = false"
+    />
+
+    <!-- League Table Dialog -->
+    <LeagueTableDialog
+      v-model:open="showLeagueTableDialog"
+    />
+
+    <!-- League Schedule Dialog -->
+    <LeagueScheduleDialog
+      v-model:open="showLeagueScheduleDialog"
+      @watch-highlights="handleWatchLeagueHighlights"
+    />
 
   </div>
 </template>

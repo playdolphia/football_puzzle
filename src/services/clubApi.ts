@@ -183,6 +183,22 @@ export interface League {
   season: string
 }
 
+// League list item (from GET /Club/League/List)
+export interface LeagueListItem {
+  id: number
+  name: string
+  min_level: number
+  max_level: number
+  season: string
+}
+
+// Club's league membership status
+export interface ClubLeagueMembership {
+  league_id: number
+  member_id: number
+  joined_at?: string
+}
+
 export interface LeagueMatch {
   match_id: number
   round: number
@@ -337,5 +353,20 @@ export const clubApi = {
   // Get league start countdown
   async getLeagueStart(token: string): Promise<ApiResponse<LeagueStart>> {
     return apiRequest('/Club/League/Start', { method: 'GET' }, token)
+  },
+
+  // Get list of available leagues
+  async getLeagueList(token: string): Promise<ApiResponse<LeagueListItem[]>> {
+    return apiRequest('/Club/League/List', { method: 'GET' }, token)
+  },
+
+  // Get club's current league membership (returns null if not in league)
+  async getMyLeague(token: string): Promise<ApiResponse<ClubLeagueMembership | null>> {
+    return apiRequest('/Club/League/Me', { method: 'GET' }, token)
+  },
+
+  // Get match events/highlights for a specific league match
+  async getLeagueMatchEvents(leagueId: number, matchId: number, token: string): Promise<ApiResponse<MatchEvents>> {
+    return apiRequest(`/Club/League/${leagueId}/Match/${matchId}/Events`, { method: 'GET' }, token)
   }
 }
