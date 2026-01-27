@@ -3,17 +3,38 @@ import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useGlobalStore } from '@/stores'
 import { useClubStore } from '@/stores/clubStore'
+import { useLeagueStore } from '@/stores/leagueStore'
 import { Button } from '@/components/ui/button'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { AlertCircle, ArrowLeft, Users, HelpCircle, Trophy } from 'lucide-vue-next'
 import Loader from '@/components/layouts/Loader.vue'
 import EnergyBar from '@/components/layouts/EnergyBar.vue'
+import LeagueTableWidget from '@/components/layouts/LeagueTableWidget.vue'
+import JoinLeagueDialog from '@/components/league/JoinLeagueDialog.vue'
+import LeagueTableDialog from '@/components/league/LeagueTableDialog.vue'
 
 const router = useRouter()
 const globalStore = useGlobalStore()
 const clubStore = useClubStore()
+const leagueStore = useLeagueStore()
 const userData = ref(null)
 const error = ref('')
+
+// League dialog states
+const showJoinLeagueDialog = ref(false)
+const showLeagueTableDialog = ref(false)
+
+// Open join league dialog
+const openJoinLeagueDialog = async () => {
+  showJoinLeagueDialog.value = true
+  await leagueStore.fetchAvailableLeagues()
+}
+
+// Open full league table dialog
+const openLeagueTableDialog = async () => {
+  showLeagueTableDialog.value = true
+  await leagueStore.fetchLeagueTable()
+}
 
 // League countdown state
 const countdownSeconds = ref(0)
@@ -129,12 +150,18 @@ onMounted(async () => {
         globalStore.getPendingTasks(),
         globalStore.fetchUserEnergy(),
         clubStore.fetchClub(), // Fetch club data to show club energy
-        clubStore.fetchLeagueStart() // Fetch league start countdown
+        clubStore.fetchLeagueStart(), // Fetch league start countdown
+        leagueStore.fetchMyLeague() // Check league membership
       ])
 
       // Start countdown if league start data exists
       if (clubStore.leagueStart?.countdown) {
         startCountdown(clubStore.leagueStart.countdown)
+      }
+
+      // Fetch league table if in a league
+      if (leagueStore.isInLeague) {
+        leagueStore.fetchLeagueTable()
       }
     } else {
       if (!token) {
@@ -179,12 +206,18 @@ onMounted(async () => {
         globalStore.getPendingTasks(),
         globalStore.fetchUserEnergy(),
         clubStore.fetchClub(), // Fetch club data to show club energy
-        clubStore.fetchLeagueStart() // Fetch league start countdown
+        clubStore.fetchLeagueStart(), // Fetch league start countdown
+        leagueStore.fetchMyLeague() // Check league membership
       ])
 
       // Start countdown if league start data exists
       if (clubStore.leagueStart?.countdown) {
         startCountdown(clubStore.leagueStart.countdown)
+      }
+
+      // Fetch league table if in a league
+      if (leagueStore.isInLeague) {
+        leagueStore.fetchLeagueTable()
       }
 
       userData.value = tokenData
@@ -308,6 +341,13 @@ onUnmounted(() => {
           </div>
         </div>
 
+        <!-- League Table Widget -->
+        <LeagueTableWidget
+          v-if="clubStore.hasClub"
+          @join-league="openJoinLeagueDialog"
+          @view-full-table="openLeagueTableDialog"
+        />
+
         <!-- Main Actions -->
         <div class="space-y-6 pt-4">
           <div class="text-center space-y-2">
@@ -357,5 +397,16 @@ onUnmounted(() => {
         <Loader variant="game" title="LOADING CLUB MANAGEMENT" subtitle="Preparing..." />
       </div>
     </div>
+
+    <!-- Join League Dialog -->
+    <JoinLeagueDialog
+      v-model:open="showJoinLeagueDialog"
+      @joined="showJoinLeagueDialog = false"
+    />
+
+    <!-- League Table Dialog -->
+    <LeagueTableDialog
+      v-model:open="showLeagueTableDialog"
+    />
   </div>
 </template>

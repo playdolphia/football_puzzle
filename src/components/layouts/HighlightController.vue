@@ -7,6 +7,7 @@ const props = defineProps<{
   currentMinute: number
   currentScore: { club: number; bot: number }
   clubName: string
+  opponentName?: string
   isComplete: boolean
   currentEventText: string
 }>()
@@ -31,7 +32,7 @@ const emit = defineEmits<{
         </div>
         <div class="text-white/20 text-lg">-</div>
         <div class="text-center">
-          <p class="text-[10px] text-white/40 uppercase tracking-wider">Bot Team</p>
+          <p class="text-[10px] text-white/40 uppercase tracking-wider">{{ opponentName || 'Bot Team' }}</p>
           <p class="text-2xl font-light text-rose-400">{{ currentScore.bot }}</p>
         </div>
       </div>

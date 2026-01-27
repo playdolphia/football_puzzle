@@ -3,12 +3,13 @@ import { ref, computed, onMounted, onUnmounted, watch, nextTick } from 'vue'
 import { useRouter } from 'vue-router'
 import { useGlobalStore } from '@/stores'
 import { useClubStore } from '@/stores/clubStore'
+import { useLeagueStore } from '@/stores/leagueStore'
 import { Button } from '@/components/ui/button'
 import {
   Dialog,
   DialogContent
 } from '@/components/ui/dialog'
-import { ArrowLeft, Dumbbell, Utensils, Zap, Clock, Loader2, Trophy, Plus, BedDouble, Pencil, PlayCircle } from 'lucide-vue-next'
+import { ArrowLeft, Dumbbell, Utensils, Zap, Clock, Loader2, Trophy, Plus, BedDouble, Pencil } from 'lucide-vue-next'
 import { Input } from '@/components/ui/input'
 import { useNotificationStore } from '@/stores/notificationStore'
 import StatBox from '@/components/layouts/StatBox.vue'
@@ -17,13 +18,19 @@ import PositionBadge from '@/components/layouts/PositionBadge.vue'
 import Loader from '@/components/layouts/Loader.vue'
 import HighlightController from '@/components/layouts/HighlightController.vue'
 import NotificationCenter from '@/components/layouts/NotificationCenter.vue'
+import ActionBar from '@/components/layouts/ActionBar.vue'
+import JoinLeagueDialog from '@/components/league/JoinLeagueDialog.vue'
+import LeagueTableDialog from '@/components/league/LeagueTableDialog.vue'
+import LeagueScheduleDialog from '@/components/league/LeagueScheduleDialog.vue'
 import * as THREE from 'three'
 import gsap from 'gsap'
-import type { Player, TrainingOption, BotMatchResult, MatchScene, MatchEvent, FeedOption, FeedType, MatchStrategy } from '@/services/clubApi'
+import type { Player, TrainingOption, BotMatchResult, MatchScene, MatchEvent, FeedOption, FeedType, MatchStrategy, LeagueMatchResult, MatchEvents } from '@/services/clubApi'
+import { clubApi } from '@/services/clubApi'
 
 const router = useRouter()
 const globalStore = useGlobalStore()
 const clubStore = useClubStore()
+const leagueStore = useLeagueStore()
 const notificationStore = useNotificationStore()
 
 const canvasContainer = ref<HTMLDivElement | null>(null)
@@ -40,6 +47,9 @@ const showRestDialog = ref(false)
 const showFeedDialog = ref(false)
 const showRenameDialog = ref(false)
 const showMatchLevelDialog = ref(false)
+const showJoinLeagueDialog = ref(false)
+const showLeagueTableDialog = ref(false)
+const showLeagueScheduleDialog = ref(false)
 const selectedMatchLevel = ref<1 | 2 | 3>(1)
 const selectedClubStrategy = ref<MatchStrategy>('balanced')
 const selectedBotStrategy = ref<MatchStrategy>('balanced')
@@ -77,6 +87,10 @@ const currentHighlightSceneIndex = ref(0)
 const currentHighlightEventIndex = ref(0)
 const highlightRunningScore = ref({ club: 0, bot: 0 })
 let highlightPlaybackInterval: ReturnType<typeof setInterval> | null = null
+
+// League highlight context
+const isLeagueHighlight = ref(false)
+const leagueOpponentName = ref('')
 
 // Ball sprite for highlight animations
 let ballMesh: THREE.Mesh | null = null
@@ -804,21 +818,29 @@ const showBotsWithAnimation = () => {
   if (botsVisible) return
   botsVisible = true
 
-  animatedSprites
-    .filter(s => s.team === 'bot')
-    .forEach((bot, index) => {
-      // Make visible and position above
-      bot.mesh.visible = true
-      bot.mesh.position.y = bot.position.y + DROP_DISTANCE
+  const botSprites = animatedSprites.filter(s => s.team === 'bot')
 
-      // Animate drop with staggered delay
-      gsap.to(bot.mesh.position, {
-        y: bot.position.y,
-        duration: CHARACTER_DROP_DURATION,
-        ease: 'bounce.out',
-        delay: index * 0.08
-      })
+  // For league highlights, swap bot textures to dolphin with red tint
+  if (isLeagueHighlight.value) {
+    botSprites.forEach(bot => {
+      updateSpriteTexture(bot, '/sprites/dolphin_happy.png', 6, textureLoaderRef, false, false, 'idle')
+      ;(bot.mesh.material as THREE.MeshBasicMaterial).color.set(0xff8888)
     })
+  }
+
+  botSprites.forEach((bot, index) => {
+    // Make visible and position above
+    bot.mesh.visible = true
+    bot.mesh.position.y = bot.position.y + DROP_DISTANCE
+
+    // Animate drop with staggered delay
+    gsap.to(bot.mesh.position, {
+      y: bot.position.y,
+      duration: CHARACTER_DROP_DURATION,
+      ease: 'bounce.out',
+      delay: index * 0.08
+    })
+  })
 }
 
 // Hide bots with reverse animation (go back up)
@@ -1253,6 +1275,120 @@ const showMatchConfirmation = (level: 1 | 2 | 3) => {
   showConfirmDialog.value = true
 }
 
+// Open join league dialog
+const openJoinLeagueDialog = async () => {
+  showJoinLeagueDialog.value = true
+  await leagueStore.fetchAvailableLeagues()
+}
+
+// Open league table dialog
+const openLeagueTableDialog = async () => {
+  if (!leagueStore.isInLeague) return
+  showLeagueTableDialog.value = true
+  await leagueStore.fetchLeagueTable()
+}
+
+// Open league schedule dialog
+const openLeagueScheduleDialog = async () => {
+  if (!leagueStore.isInLeague) return
+  showLeagueScheduleDialog.value = true
+  await leagueStore.fetchLeagueSchedule()
+}
+
+// Transform league match result (home/away format) to internal club/bot format
+const transformLeagueMatchResult = (leagueResult: LeagueMatchResult): { matchEvents: MatchEvents; opponentName: string } => {
+  const userClubId = clubStore.club?.id || 0
+  const isUserHome = leagueResult.home_club.id === userClubId
+  const userTeamKey: 'home' | 'away' = isUserHome ? 'home' : 'away'
+  const opponentTeamKey: 'home' | 'away' = isUserHome ? 'away' : 'home'
+  const opponentName = isUserHome ? leagueResult.away_club.name : leagueResult.home_club.name
+
+  // Build opponent player ID → bot index mapping (max 6 bot positions)
+  const opponentPlayerIds = new Set<number>()
+  leagueResult.match_events.scenes.forEach(scene => {
+    scene.events.forEach(event => {
+      const collectId = (id: number | undefined, team: 'home' | 'away') => {
+        if (id !== undefined && team === opponentTeamKey) opponentPlayerIds.add(id)
+      }
+      collectId(event.player_id, event.team)
+      collectId(event.from_player_id, event.team)
+      collectId(event.to_player_id, event.team)
+      collectId(event.assist_player_id, event.team)
+    })
+  })
+  const opponentIdMap = new Map<number, number>()
+  let botIndex = 1
+  opponentPlayerIds.forEach(id => {
+    opponentIdMap.set(id, -(botIndex++))
+  })
+
+  const mapTeam = (team: 'home' | 'away'): 'club' | 'bot' => {
+    return team === userTeamKey ? 'club' : 'bot'
+  }
+
+  const mapPlayerId = (id: number | undefined, team: 'home' | 'away'): number | undefined => {
+    if (id === undefined) return undefined
+    if (team === opponentTeamKey) return opponentIdMap.get(id) ?? -(Math.abs(id % 6) + 1)
+    return id
+  }
+
+  const transformedScenes: MatchScene[] = leagueResult.match_events.scenes.map(scene => ({
+    scene_type: scene.scene_type,
+    team: mapTeam(scene.team),
+    minute: scene.minute,
+    events: scene.events.map(event => ({
+      minute: event.minute,
+      team: mapTeam(event.team),
+      action: event.action,
+      result: event.result,
+      player_id: mapPlayerId(event.player_id, event.team),
+      from_player_id: mapPlayerId(event.from_player_id, event.team),
+      to_player_id: mapPlayerId(event.to_player_id, event.team),
+      assist_player_id: mapPlayerId(event.assist_player_id, event.team),
+    }))
+  }))
+
+  return {
+    matchEvents: {
+      mode: 'highlight',
+      final_score: {
+        club: isUserHome ? leagueResult.score.home : leagueResult.score.away,
+        bot: isUserHome ? leagueResult.score.away : leagueResult.score.home
+      },
+      scenes: transformedScenes
+    },
+    opponentName
+  }
+}
+
+// Handle watching league match highlights
+const handleWatchLeagueHighlights = async (matchId: number) => {
+  // Close schedule dialog
+  showLeagueScheduleDialog.value = false
+
+  // Fetch the full match result with home/away format
+  const token = globalStore.apiToken || ''
+  const result = await clubApi.getMatchResult(matchId, token)
+
+  if (result.ok && result.data) {
+    const transformed = transformLeagueMatchResult(result.data)
+
+    // Set league context
+    isLeagueHighlight.value = true
+    leagueOpponentName.value = transformed.opponentName
+
+    // Store transformed events for the highlight viewer
+    lastMatchResultForViewer.value = {
+      result: 'draw',
+      score: transformed.matchEvents.final_score,
+      rewards: { xp: 0, energy: 0, fans: 0 },
+      players: [],
+      match_events: transformed.matchEvents
+    }
+    openHighlightMode()
+  }
+}
+
 // Play bot match with selected level
 const executePlayBotMatch = async (level: 1 | 2 | 3) => {
   showConfirmDialog.value = false
@@ -1355,11 +1491,12 @@ const currentHighlightMinute = computed(() => {
 const getHighlightPlayerName = (playerId: number | undefined): string => {
   if (!playerId) return 'Unknown'
 
-  // Negative IDs are bot players
+  // Negative IDs are opponent players (bot or league opponent)
   if (playerId < 0) {
-    const botRoles = ['GK', 'DEF', 'DEF', 'MID', 'MID', 'ATT']
-    const botIndex = Math.abs(playerId) - 1
-    return `Bot ${botRoles[botIndex] || 'Player'}`
+    const roles = ['GK', 'DEF', 'DEF', 'MID', 'MID', 'ATT']
+    const index = Math.abs(playerId) - 1
+    const prefix = isLeagueHighlight.value ? 'Opponent' : 'Bot'
+    return `${prefix} ${roles[index] || 'Player'}`
   }
 
   const player = clubStore.players.find(p => p.id === playerId)
@@ -1371,16 +1508,15 @@ const currentHighlightEventText = computed(() => {
   const event = currentHighlightEvent.value
   if (!event) return 'Press Play to start'
 
-  const team = event.team === 'club' ? clubStore.clubName : 'Bot Team'
-
   switch (event.action) {
     case 'pass':
       return `${getHighlightPlayerName(event.from_player_id)} passes to ${getHighlightPlayerName(event.to_player_id)}`
     case 'shot':
       return `${getHighlightPlayerName(event.player_id)} shoots!`
     case 'goal':
-      const scorer = getHighlightPlayerName(event.player_id)
-      return `GOAL! ${scorer} scores!`
+      return `GOAL! ${getHighlightPlayerName(event.player_id)} scores!`
+    case 'save':
+      return `SAVE! ${getHighlightPlayerName(event.player_id)} makes a great stop!`
     default:
       return event.action
   }
@@ -1517,6 +1653,16 @@ const animateSpriteHighlight = (sprite: AnimatedSprite, action: string) => {
       repeat: 1,
       ease: 'power2.out'
     })
+  } else if (action === 'save') {
+    // Goalkeeper dive animation - lateral movement + slight lift
+    gsap.to(sprite.mesh.position, {
+      x: sprite.position.x + 0.15,
+      y: originalY + 0.1,
+      duration: 0.2,
+      yoyo: true,
+      repeat: 1,
+      ease: 'power2.out'
+    })
   }
 }
 
@@ -1566,6 +1712,16 @@ const processHighlightEvent = (event: MatchEvent) => {
     setTimeout(() => {
       hideBall()
     }, 500)
+  } else if (event.action === 'save' && event.player_id) {
+    const gkSprite = getSpriteForPlayer(event.player_id)
+    if (gkSprite) {
+      animateSpriteHighlight(gkSprite, 'save')
+    }
+
+    // Hide ball after save (caught/deflected)
+    setTimeout(() => {
+      hideBall()
+    }, 400)
   }
 }
 
@@ -1664,13 +1820,13 @@ const skipHighlightScene = () => {
     // Update score for current scene if not yet counted
     const scene = currentHighlightScene.value
     if (scene) {
-      // Check if we haven't counted this goal yet
+      // Check if we haven't counted this goal yet (only count 'goal' scenes, not 'chance')
       const expectedClubGoals = highlightScenes.value
         .slice(0, currentHighlightSceneIndex.value + 1)
-        .filter(s => s.team === 'club').length
+        .filter(s => s.team === 'club' && s.scene_type === 'goal').length
       const expectedBotGoals = highlightScenes.value
         .slice(0, currentHighlightSceneIndex.value + 1)
-        .filter(s => s.team === 'bot').length
+        .filter(s => s.team === 'bot' && s.scene_type === 'goal').length
 
       highlightRunningScore.value = { club: expectedClubGoals, bot: expectedBotGoals }
     }
@@ -1705,6 +1861,17 @@ const closeHighlightMode = () => {
 
   // Hide ball
   hideBall()
+
+  // If league highlight, restore bot textures and reset color tint
+  if (isLeagueHighlight.value) {
+    const botSprites = animatedSprites.filter(s => s.team === 'bot')
+    botSprites.forEach(bot => {
+      updateSpriteTexture(bot, botAnimations[0].path, botAnimations[0].frames, textureLoaderRef, false, false, 'idle')
+      ;(bot.mesh.material as THREE.MeshBasicMaterial).color.set(0xffffff)
+    })
+    isLeagueHighlight.value = false
+    leagueOpponentName.value = ''
+  }
 
   // Hide bots after a delay
   botHideTimeout = setTimeout(() => {
@@ -2636,6 +2803,9 @@ onMounted(async () => {
   // Fetch training options
   clubStore.fetchTrainingOptions()
 
+  // Fetch league membership status
+  leagueStore.fetchMyLeague()
+
   // Initialize scene
   initScene()
 
@@ -2823,35 +2993,20 @@ const clubInfo = computed(() => ({
     </div>
 
     <!-- Bottom Actions - MV3 Style (hide when highlight mode is active) -->
-    <div v-if="!isInitializing && !needsClubCreation && clubStore.hasClub && !isHighlightMode" class="absolute bottom-6 left-1/2 -translate-x-1/2 z-20 flex flex-col items-center gap-3 px-6 py-4 border border-white/10 backdrop-blur-md bg-[#0a0812]/80">
-      <div class="flex items-center gap-3">
-        <Button
-          variant="game"
-          size="game"
-          class="px-8 gap-2 shadow-lg shadow-[#4fd4d4]/20 border border-[#4fd4d4]/30 hover:shadow-xl hover:shadow-[#4fd4d4]/30 transition-all"
-          :disabled="clubStore.loading.match || busyPlayersInfo.hasBusy"
-          @click="openMatchLevelDialog"
-        >
-          <Loader2 v-if="clubStore.loading.match" class="w-4 h-4 animate-spin" />
-          <Clock v-else-if="busyPlayersInfo.hasBusy" class="w-4 h-4" />
-          <Trophy v-else class="w-4 h-4" />
-          <span v-if="busyPlayersInfo.hasBusy">{{ busyPlayersInfo.countdown }}</span>
-          <span v-else>Play Match</span>
-        </Button>
+    <div v-if="!isInitializing && !needsClubCreation && clubStore.hasClub && !isHighlightMode" class="absolute bottom-6 left-0 right-0 mx-auto z-20 w-[calc(100%-2rem)] max-w-md">
+      <ActionBar
+        :is-in-league="leagueStore.isInLeague"
+        :loading="{ match: clubStore.loading.match, join: leagueStore.loading.join }"
+        :disabled="busyPlayersInfo.hasBusy"
+        :busy-countdown="busyPlayersInfo.hasBusy ? busyPlayersInfo.countdown : null"
+        @play-bot="openMatchLevelDialog"
+        @join-league="openJoinLeagueDialog"
+        @open-schedule="openLeagueScheduleDialog"
+        @open-table="openLeagueTableDialog"
+      />
 
-        <!-- Watch Highlights Button (shows when last match has events) -->
-        <Button
-          v-if="lastMatchResultForViewer?.match_events?.scenes?.length"
-          variant="game-secondary"
-          size="game"
-          class="gap-2"
-          @click="openHighlightMode"
-        >
-          <PlayCircle class="w-4 h-4" />
-          Highlights
-        </Button>
-      </div>
-      <div class="text-white/30 text-[10px] tracking-wider uppercase">
+
+      <div class="text-white/30 text-[10px] tracking-wider uppercase text-center mt-3">
         Tap on a player to interact
       </div>
     </div>
@@ -2863,6 +3018,7 @@ const clubInfo = computed(() => ({
       :current-minute="currentHighlightMinute"
       :current-score="highlightRunningScore"
       :club-name="clubStore.clubName"
+      :opponent-name="leagueOpponentName || undefined"
       :is-complete="highlightComplete"
       :current-event-text="currentHighlightEventText"
       @play="startHighlightPlayback"
@@ -3338,6 +3494,23 @@ const clubInfo = computed(() => ({
         </div>
       </DialogContent>
     </Dialog>
+
+    <!-- Join League Dialog -->
+    <JoinLeagueDialog
+      v-model:open="showJoinLeagueDialog"
+      @joined="showJoinLeagueDialog = false"
+    />
+
+    <!-- League Table Dialog -->
+    <LeagueTableDialog
+      v-model:open="showLeagueTableDialog"
+    />
+
+    <!-- League Schedule Dialog -->
+    <LeagueScheduleDialog
+      v-model:open="showLeagueScheduleDialog"
+      @watch-highlights="handleWatchLeagueHighlights"
+    />
 
   </div>
 </template>
