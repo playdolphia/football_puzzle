@@ -1,6 +1,7 @@
 import { defineStore } from 'pinia'
 import { clubApi, type LeagueListItem, type ClubLeagueMembership, type League, type LeagueTableEntry, type LeagueMatch, type MatchEvents } from '@/services/clubApi'
 import { useGlobalStore } from '@/stores/index'
+import { useClubStore } from '@/stores/clubStore'
 
 interface LeagueState {
   // Available leagues to join
@@ -97,8 +98,34 @@ export const useLeagueStore = defineStore('league', {
       this.error = null
     },
 
-    // Fetch club's current league membership
+    // Detect league membership from club data (from /Club/Me response)
+    detectMembershipFromClub() {
+      const clubStore = useClubStore()
+      const league = clubStore.club?.league
+      if (league) {
+        this.currentMembership = {
+          league_id: league.id,
+          member_id: clubStore.club!.id,
+          joined_at: undefined
+        }
+        // Also store league info for display
+        if (!this.leagueInfo) {
+          this.leagueInfo = { id: league.id, name: league.name, season: '' }
+        }
+        return { ok: true, data: this.currentMembership }
+      }
+      this.currentMembership = null
+      return { ok: true, data: null }
+    },
+
+    // Fetch club's current league membership (fallback via separate endpoint)
     async fetchMyLeague() {
+      // First try to detect from already-loaded club data
+      const clubStore = useClubStore()
+      if (clubStore.club?.league) {
+        return this.detectMembershipFromClub()
+      }
+
       this.loading.membership = true
       this.error = null
       try {

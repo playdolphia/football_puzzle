@@ -74,6 +74,7 @@ export interface Club {
   xp?: number
   fans: number
   created_at?: string
+  league?: { id: number; name: string } | null
   players: Player[]
   club_hints?: ClubHint[]
 }
@@ -109,16 +110,16 @@ export interface FeedOption {
 export interface MatchEvent {
   minute: number
   team: 'club' | 'bot'
-  action: 'pass' | 'shot' | 'goal'
+  action: 'pass' | 'shot' | 'goal' | 'save'
   player_id?: number
   from_player_id?: number
   to_player_id?: number
   assist_player_id?: number
-  result: 'complete' | 'on_target' | 'scored'
+  result: 'complete' | 'on_target' | 'scored' | 'saved'
 }
 
 export interface MatchScene {
-  scene_type: 'goal'
+  scene_type: 'goal' | 'chance'
   team: 'club' | 'bot'
   minute: number
   events: MatchEvent[]
@@ -128,6 +129,40 @@ export interface MatchEvents {
   mode: 'highlight'
   final_score: { club: number; bot: number }
   scenes: MatchScene[]
+}
+
+// League Match Result Types (from GET /Club/Match/{matchId}/Result)
+export interface LeagueMatchEventRaw {
+  minute: number
+  team: 'home' | 'away'
+  action: 'pass' | 'shot' | 'goal' | 'save'
+  player_id?: number
+  from_player_id?: number
+  to_player_id?: number
+  assist_player_id?: number
+  result: 'complete' | 'on_target' | 'scored' | 'saved'
+}
+
+export interface LeagueMatchScene {
+  scene_type: 'goal' | 'chance'
+  team: 'home' | 'away'
+  minute: number
+  events: LeagueMatchEventRaw[]
+}
+
+export interface LeagueMatchResult {
+  match_id: number
+  round: number
+  played_at: string
+  result: 'home_win' | 'away_win' | 'draw'
+  score: { home: number; away: number }
+  match_events: {
+    mode: 'highlight'
+    final_score: { home: number; away: number }
+    scenes: LeagueMatchScene[]
+  }
+  home_club: { id: number; name: string; level: number }
+  away_club: { id: number; name: string; level: number }
 }
 
 export interface ClubProgress {
@@ -368,5 +403,10 @@ export const clubApi = {
   // Get match events/highlights for a specific league match
   async getLeagueMatchEvents(leagueId: number, matchId: number, token: string): Promise<ApiResponse<MatchEvents>> {
     return apiRequest(`/Club/League/${leagueId}/Match/${matchId}/Events`, { method: 'GET' }, token)
+  },
+
+  // Get league match result with full details (home/away format)
+  async getMatchResult(matchId: number, token: string): Promise<ApiResponse<LeagueMatchResult>> {
+    return apiRequest(`/Club/Match/${matchId}/Result`, { method: 'GET' }, token)
   }
 }

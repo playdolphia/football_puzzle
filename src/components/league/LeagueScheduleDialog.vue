@@ -1,8 +1,8 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed } from 'vue'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent } from '@/components/ui/dialog'
-import { Calendar, Loader2, PlayCircle, Clock } from 'lucide-vue-next'
+import { Calendar, PlayCircle, Clock } from 'lucide-vue-next'
 import { useLeagueStore } from '@/stores/leagueStore'
 import { useClubStore } from '@/stores/clubStore'
 import type { LeagueMatch } from '@/services/clubApi'
@@ -18,9 +18,6 @@ const emit = defineEmits<{
 
 const leagueStore = useLeagueStore()
 const clubStore = useClubStore()
-
-// Track which match is loading highlights
-const loadingHighlightsFor = ref<number | null>(null)
 
 // Get current club ID for highlighting
 const clubId = computed(() => clubStore.club?.id)
@@ -71,15 +68,9 @@ const formatCountdown = (dateStr: string): string => {
   return `in ${minutes}m`
 }
 
-// Watch highlights for a match
-const watchHighlights = async (matchId: number) => {
-  loadingHighlightsFor.value = matchId
-  const result = await leagueStore.fetchMatchEvents(matchId)
-  loadingHighlightsFor.value = null
-
-  if (result.ok) {
-    emit('watch-highlights', matchId)
-  }
+// Watch highlights for a match (parent handles fetching)
+const watchHighlights = (matchId: number) => {
+  emit('watch-highlights', matchId)
 }
 
 // Refresh schedule data
@@ -196,11 +187,9 @@ const closeDialog = () => {
                   variant="game-ghost"
                   size="sm"
                   class="h-6 px-2 text-xs gap-1"
-                  :disabled="loadingHighlightsFor === match.match_id"
                   @click="watchHighlights(match.match_id)"
                 >
-                  <Loader2 v-if="loadingHighlightsFor === match.match_id" class="w-3 h-3 animate-spin" />
-                  <PlayCircle v-else class="w-3 h-3" />
+                  <PlayCircle class="w-3 h-3" />
                   Highlights
                 </Button>
                 <span v-else class="text-amber-400/60 text-[10px] uppercase">Scheduled</span>
