@@ -150,9 +150,11 @@ onMounted(async () => {
         globalStore.getPendingTasks(),
         globalStore.fetchUserEnergy(),
         clubStore.fetchClub(), // Fetch club data to show club energy
-        clubStore.fetchLeagueStart(), // Fetch league start countdown
-        leagueStore.fetchMyLeague() // Check league membership
+        clubStore.fetchLeagueStart() // Fetch league start countdown
       ])
+
+      // Detect league membership from club data (after club is loaded)
+      leagueStore.detectMembershipFromClub()
 
       // Start countdown if league start data exists
       if (clubStore.leagueStart?.countdown) {
@@ -206,9 +208,11 @@ onMounted(async () => {
         globalStore.getPendingTasks(),
         globalStore.fetchUserEnergy(),
         clubStore.fetchClub(), // Fetch club data to show club energy
-        clubStore.fetchLeagueStart(), // Fetch league start countdown
-        leagueStore.fetchMyLeague() // Check league membership
+        clubStore.fetchLeagueStart() // Fetch league start countdown
       ])
+
+      // Detect league membership from club data (after club is loaded)
+      leagueStore.detectMembershipFromClub()
 
       // Start countdown if league start data exists
       if (clubStore.leagueStart?.countdown) {
