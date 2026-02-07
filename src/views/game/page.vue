@@ -22,6 +22,7 @@ import ActionBar from '@/components/layouts/ActionBar.vue'
 import JoinLeagueDialog from '@/components/league/JoinLeagueDialog.vue'
 import LeagueTableDialog from '@/components/league/LeagueTableDialog.vue'
 import LeagueScheduleDialog from '@/components/league/LeagueScheduleDialog.vue'
+import PlayerPopup from '@/components/game/PlayerPopup.vue'
 import * as THREE from 'three'
 import gsap from 'gsap'
 import type { Player, TrainingOption, BotMatchResult, MatchScene, MatchEvent, FeedOption, FeedType, MatchStrategy, LeagueMatchResult, MatchEvents } from '@/services/clubApi'
@@ -42,6 +43,11 @@ const createError = ref('')
 // Player interaction state
 const selectedPlayer = ref<Player | null>(null)
 const showPlayerDialog = ref(false)
+const showPlayerPopup = ref(false)
+const popupAnchorX = ref(0)
+const popupAnchorY = ref(0)
+const popupSpriteId = ref<number | undefined>(undefined)
+const containerDimensions = ref({ width: 0, height: 0 })
 const showTrainDialog = ref(false)
 const showRestDialog = ref(false)
 const showFeedDialog = ref(false)
@@ -958,7 +964,34 @@ const handlePlayerClick = (playerId: number) => {
   const player = clubStore.players.find(p => p.id === playerId)
   if (player) {
     selectedPlayer.value = player
-    showPlayerDialog.value = true
+    popupSpriteId.value = playerId
+
+    // Compute initial anchor position
+    const sprite = animatedSprites.find(s => s.playerId === playerId)
+    if (sprite) {
+      const screenPos = getScreenPosition(sprite)
+      if (screenPos) {
+        popupAnchorX.value = screenPos.x
+        popupAnchorY.value = screenPos.y
+      }
+    }
+
+    // Update container dimensions
+    if (canvasContainer.value) {
+      containerDimensions.value = {
+        width: canvasContainer.value.clientWidth,
+        height: canvasContainer.value.clientHeight
+      }
+    }
+
+    nextTick(() => {
+      showPlayerPopup.value = true
+    })
+
+    // Start timer if player has active task
+    if (player.current_task && !isTaskExpiredCheck(player.task_ends_at)) {
+      startDialogTimer()
+    }
   }
 }
 
@@ -989,6 +1022,18 @@ const checkSpriteTap = (clientX: number, clientY: number): boolean => {
     }
   }
   return false
+}
+
+// Convert sprite world position to screen coordinates
+const getScreenPosition = (sprite: AnimatedSprite): { x: number; y: number } | null => {
+  if (!canvasContainer.value) return null
+  const worldPos = new THREE.Vector3(sprite.position.x, sprite.position.y, sprite.position.z)
+  worldPos.project(camera)
+  const rect = canvasContainer.value.getBoundingClientRect()
+  return {
+    x: (worldPos.x * 0.5 + 0.5) * rect.width,
+    y: (-worldPos.y * 0.5 + 0.5) * rect.height
+  }
 }
 
 // Open train dialog
@@ -1203,6 +1248,40 @@ const executeFeed = async (feedType: FeedType = 'protein_shake') => {
 const openRestDialog = () => {
   showPlayerDialog.value = false
   showRestDialog.value = true
+}
+
+// Popup event handlers
+const handlePopupClose = () => {
+  showPlayerPopup.value = false
+  popupSpriteId.value = undefined
+  stopDialogTimer()
+}
+
+const handlePopupTrain = () => {
+  showPlayerPopup.value = false
+  showTrainDialog.value = true
+  if (clubStore.trainingOptions.length === 0) {
+    clubStore.fetchTrainingOptions()
+  }
+}
+
+const handlePopupFeed = () => {
+  showPlayerPopup.value = false
+  if (clubStore.feedOptions.length === 0) {
+    clubStore.fetchFeedOptions()
+  }
+  selectedFeedType.value = 'protein_shake'
+  showFeedDialog.value = true
+}
+
+const handlePopupRest = () => {
+  showPlayerPopup.value = false
+  showRestDialog.value = true
+}
+
+const handlePopupDetails = () => {
+  showPlayerPopup.value = false
+  showPlayerDialog.value = true
 }
 
 // Show rest confirmation
@@ -1736,6 +1815,7 @@ const startHighlightPlayback = () => {
     highlightRunningScore.value = { club: 0, bot: 0 }
   }
 
+  showPlayerPopup.value = false
   isHighlightMode.value = true
   highlightPlaying.value = true
 
@@ -2386,7 +2466,15 @@ const initScene = () => {
 
     // If it was a quick tap without movement, check for sprite click
     if (elapsed < TAP_THRESHOLD && !pointerMoved) {
-      checkSpriteTap(e.clientX, e.clientY)
+      const hitSprite = checkSpriteTap(e.clientX, e.clientY)
+
+      // If no sprite was tapped and popup is visible, close it (click-outside)
+      if (!hitSprite && showPlayerPopup.value) {
+        const popupEl = document.querySelector('[data-player-popup]')
+        if (!popupEl || !popupEl.contains(e.target as Node)) {
+          handlePopupClose()
+        }
+      }
     }
 
     isPanning = false
@@ -2569,6 +2657,18 @@ const initScene = () => {
     }
 
     renderer.render(scene, camera)
+
+    // Update popup anchor position if visible
+    if (showPlayerPopup.value && popupSpriteId.value !== undefined) {
+      const sprite = animatedSprites.find(s => s.playerId === popupSpriteId.value)
+      if (sprite) {
+        const screenPos = getScreenPosition(sprite)
+        if (screenPos) {
+          popupAnchorX.value = screenPos.x
+          popupAnchorY.value = screenPos.y
+        }
+      }
+    }
   }
   animate(0)
 
@@ -2577,6 +2677,10 @@ const initScene = () => {
     if (!canvasContainer.value) return
     updateCameraZoom()
     renderer.setSize(canvasContainer.value.clientWidth, canvasContainer.value.clientHeight)
+    containerDimensions.value = {
+      width: canvasContainer.value.clientWidth,
+      height: canvasContainer.value.clientHeight
+    }
   }
   window.addEventListener('resize', handleResize)
 }
@@ -3033,6 +3137,23 @@ const clubInfo = computed(() => ({
       class="w-full h-screen cursor-grab active:cursor-grabbing"
       style="touch-action: none"
     ></div>
+
+    <!-- Player Popup (anchored to sprite) -->
+    <PlayerPopup
+      v-if="!isHighlightMode && !isInitializing && !needsClubCreation"
+      :player="selectedPlayer"
+      :visible="showPlayerPopup"
+      :anchor-x="popupAnchorX"
+      :anchor-y="popupAnchorY"
+      :container-width="containerDimensions.width"
+      :container-height="containerDimensions.height"
+      :timer-tick="timerTick"
+      @close="handlePopupClose"
+      @train="handlePopupTrain"
+      @feed="handlePopupFeed"
+      @rest="handlePopupRest"
+      @details="handlePopupDetails"
+    />
 
     <!-- Player Dialog - Monument Valley 3 Style -->
     <Dialog v-model:open="showPlayerDialog">
