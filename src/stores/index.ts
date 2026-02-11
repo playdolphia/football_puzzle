@@ -22,8 +22,9 @@ export const useGlobalStore = defineStore('global', {
       return !!state.apiToken
     },
     displayName: (state): string => {
+      if (state.userProfile?.user_info?.display_name) return state.userProfile.user_info.display_name
       if (!state.user) return 'Player'
-      return state.user.first_name || 'Player'
+      return state.user.username || 'Player'
     },
     isTestEnvironment: (): boolean => {
       return !!import.meta.env.VITE_TEST_TRANSFER_TOKEN

@@ -17,7 +17,7 @@ onMounted(() => {
 const displayName = computed(() => {
   const profile = globalStore.userProfile
   if (profile?.user_info?.display_name) return profile.user_info.display_name
-  if (globalStore.user) return `${globalStore.user.first_name} ${globalStore.user.last_name || ''}`.trim()
+  if (globalStore.user) return globalStore.user.username || 'Player'
   return 'Player'
 })
 
@@ -30,7 +30,7 @@ const avatarInitials = computed(() => {
   if (profile?.user_info?.display_name) {
     return profile.user_info.display_name.split(' ').map((i: string) => i[0]).join('').slice(0, 2)
   }
-  return (globalStore.user?.first_name || 'P')[0]
+  return (globalStore.user?.username || 'P')[0].toUpperCase()
 })
 
 const goToDolphia = () => {
