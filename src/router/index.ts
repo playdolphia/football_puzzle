@@ -1,4 +1,5 @@
 import { createRouter, createWebHistory } from 'vue-router'
+import { useGlobalStore } from '@/stores'
 
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
@@ -8,34 +9,18 @@ const router = createRouter({
       name: 'home',
       component: () => import('@/views/home/page.vue'),
       meta: {
-        title: 'Club Management - Dolphia'
+        title: 'Puzzle - Dolphia'
       }
     },
     {
-      path: '/club',
-      name: 'club',
-      component: () => import('@/views/club/page.vue'),
+      path: '/puzzle',
+      name: 'puzzle',
+      component: () => import('@/views/puzzle/page.vue'),
       meta: {
-        title: 'My Club - Dolphia'
+        title: 'Daily Challenge - Dolphia Puzzle',
+        requiresAuth: true,
       }
     },
-    {
-      path: '/game',
-      name: 'club-game',
-      component: () => import('@/views/game/page.vue'),
-      meta: {
-        title: 'Club Field View'
-      }
-    },
-    {
-      path: '/help',
-      name: 'club-help',
-      component: () => import('@/views/help/page.vue'),
-      meta: {
-        title: 'Club Management Guide'
-      }
-    },
-    // 404 page
     {
       path: '/:pathMatch(.*)*',
       name: 'not-found',
@@ -47,9 +32,17 @@ const router = createRouter({
   ]
 })
 
-// Dynamic title updates
 router.beforeEach((to) => {
-  document.title = to.meta.title as string || 'Dolphia'
+  document.title = to.meta.title as string || 'Dolphia Puzzle'
+
+  // Initialize auth on every navigation (idempotent - only runs once)
+  const globalStore = useGlobalStore()
+  globalStore.initAuth()
+
+  // Redirect to home if auth is required but not authenticated
+  if (to.meta.requiresAuth && !globalStore.isAuthenticated) {
+    return { name: 'home' }
+  }
 })
 
 export default router

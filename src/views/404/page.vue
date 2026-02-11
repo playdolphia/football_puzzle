@@ -1,7 +1,5 @@
 <script setup lang="ts">
 import { useRouter } from 'vue-router'
-import { Button } from '@/components/ui/button'
-import { AlertTriangle, ArrowLeft } from 'lucide-vue-next'
 
 const router = useRouter()
 
@@ -11,29 +9,52 @@ const goHome = () => {
 </script>
 
 <template>
-  <div class="min-h-screen w-full bg-[#0a0812] flex items-center justify-center px-4">
-    <div class="max-w-md w-full space-y-8 text-center">
-      <!-- Icon -->
-      <div class="w-16 h-16 mx-auto border border-rose-400/30 flex items-center justify-center">
-        <AlertTriangle class="w-8 h-8 text-rose-400" />
+  <div class="min-h-screen w-full bg-background flex items-center justify-center px-4">
+    <div class="max-w-lg w-full space-y-12 text-center">
+      <!-- 404 Number - Large and artistic -->
+      <div class="space-y-6">
+        <div class="relative">
+          <h1 class="text-[12rem] font-bold text-[#8ba888]/10 leading-none select-none">
+            404
+          </h1>
+          <div class="absolute inset-0 flex items-center justify-center">
+            <div class="w-20 h-20 rounded-full bg-[#8ba888]/5 flex items-center justify-center">
+              <div class="w-12 h-12 rounded-full border-2 border-[#8ba888]/30"></div>
+            </div>
+          </div>
+        </div>
       </div>
 
       <!-- Content -->
-      <div class="space-y-3">
-        <h1 class="text-white uppercase tracking-widest text-sm font-medium">404 - Page Not Found</h1>
-        <p class="text-white/40 text-sm">
-          Oops! The page you are looking for doesn't exist or has been moved.
+      <div class="space-y-4">
+        <h2 class="text-2xl font-semibold text-foreground tracking-tight">
+          Page Not Found
+        </h2>
+        <p class="text-muted-foreground text-base max-w-md mx-auto leading-relaxed">
+          The page you're looking for seems to have wandered off.
+          Let's get you back on track.
         </p>
       </div>
 
       <!-- Separator -->
-      <div class="h-[1px] w-full bg-white/10" />
+      <div class="flex items-center justify-center gap-3 py-2">
+        <div class="h-px w-16 bg-border"></div>
+        <div class="w-2 h-2 rounded-full bg-[#8ba888]/20"></div>
+        <div class="h-px w-16 bg-border"></div>
+      </div>
 
       <!-- Action -->
-      <Button @click="goHome" variant="game-primary" size="game" class="w-full gap-2">
-        <ArrowLeft class="w-4 h-4" />
-        Back to Home
-      </Button>
+      <div>
+        <button
+          @click="goHome"
+          class="inline-flex items-center justify-center gap-2 h-12 px-8 rounded-xl bg-[#8ba888] text-white font-medium shadow-sm hover:bg-[#7a9777] active:bg-[#6a8667] transition-all duration-300"
+        >
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18" />
+          </svg>
+          Back to Home
+        </button>
+      </div>
     </div>
   </div>
 </template>

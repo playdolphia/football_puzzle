@@ -1,15 +1,10 @@
 <script setup lang="ts">
-import { useGlobalStore } from '@/stores'
 import AdminSheet from '@/components/layouts/AdminSheet.vue'
-
-const globalStore = useGlobalStore()
 </script>
 
 <template>
-  <div class="min-h-screen">
+  <div class="min-h-screen bg-background text-foreground">
     <router-view />
+    <AdminSheet />
   </div>
-
-  <!-- Admin Sheet (globally available to admins) -->
-  <AdminSheet v-if="globalStore.isOriginalAdmin" />
 </template>
