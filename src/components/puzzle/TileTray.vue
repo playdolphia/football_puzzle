@@ -2,14 +2,18 @@
   <div class="w-full bg-muted/30 rounded-xl p-4">
     <div
       v-if="tiles.length > 0"
+      ref="scrollContainer"
       class="flex gap-3 overflow-x-auto scrollbar-thin scrollbar-thumb-muted scrollbar-track-transparent snap-x snap-mandatory pb-2"
-      style="scroll-padding: 1rem"
+      style="scroll-padding: 1rem; touch-action: pan-x; -webkit-overflow-scrolling: touch"
+      @touchstart="onTouchStart"
+      @touchmove="onTouchMove"
+      @touchend="onTouchEnd"
     >
       <div
         v-for="tile in tiles"
         :key="tile.id"
         class="shrink-0 snap-start"
-        @pointerdown="emit('tile-pointer-down', { tile, event: $event })"
+        @pointerdown="onTilePointerDown(tile, $event)"
       >
         <PuzzleTile
           :tile="tile"
@@ -39,6 +43,7 @@
 </template>
 
 <script setup lang="ts">
+import { ref } from 'vue'
 import PuzzleTile from './PuzzleTile.vue'
 
 interface Tile {
@@ -62,6 +67,71 @@ const emit = defineEmits<{
   'tile-select': [tileId: number]
   'tile-pointer-down': [payload: { tile: Tile; event: PointerEvent }]
 }>()
+
+const scrollContainer = ref<HTMLElement | null>(null)
+
+// Touch scroll handling — track whether the user is scrolling horizontally
+// so we can suppress the tile drag that would otherwise fire
+let touchStartX = 0
+let touchStartY = 0
+let isScrolling = false
+
+function onTouchStart(e: TouchEvent) {
+  touchStartX = e.touches[0].clientX
+  touchStartY = e.touches[0].clientY
+  isScrolling = false
+}
+
+function onTouchMove(e: TouchEvent) {
+  const dx = Math.abs(e.touches[0].clientX - touchStartX)
+  const dy = Math.abs(e.touches[0].clientY - touchStartY)
+  if (dx > dy && dx > 5) {
+    isScrolling = true
+  }
+}
+
+function onTouchEnd() {
+  isScrolling = false
+}
+
+function onTilePointerDown(tile: Tile, event: PointerEvent) {
+  // On touch devices, don't start drag immediately — let the scroll handler decide
+  if (event.pointerType === 'touch') {
+    // Wait a short moment to see if this becomes a horizontal scroll
+    const startX = event.clientX
+    const startY = event.clientY
+
+    const onMove = (e: PointerEvent) => {
+      const dx = Math.abs(e.clientX - startX)
+      const dy = Math.abs(e.clientY - startY)
+
+      if (dx > 5 || dy > 5) {
+        document.removeEventListener('pointermove', onMove)
+        document.removeEventListener('pointerup', onUp)
+
+        // Horizontal = scroll, let browser handle it
+        if (dx > dy) return
+
+        // Vertical = drag tile
+        emit('tile-pointer-down', { tile, event })
+      }
+    }
+
+    const onUp = () => {
+      document.removeEventListener('pointermove', onMove)
+      document.removeEventListener('pointerup', onUp)
+      // No significant movement = tap/select
+      if (!isScrolling) {
+        emit('tile-pointer-down', { tile, event })
+      }
+    }
+
+    document.addEventListener('pointermove', onMove)
+    document.addEventListener('pointerup', onUp)
+  } else {
+    emit('tile-pointer-down', { tile, event })
+  }
+}
 </script>
 
 <style scoped>
