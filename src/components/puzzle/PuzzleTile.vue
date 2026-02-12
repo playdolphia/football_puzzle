@@ -6,7 +6,7 @@
       backgroundImage: `url(${image})`,
       backgroundSize: `${gridCols * 100}% ${gridRows * 100}%`,
       backgroundPosition: `${(tile.correctCol / (gridCols - 1)) * 100}% ${(tile.correctRow / (gridRows - 1)) * 100}%`,
-      filter: isCorrect && isInGrid ? 'none' : 'grayscale(100%)',
+      filter: isInGrid && !isCorrect ? 'grayscale(100%)' : 'none',
     }"
     :class="[
       'rounded-sm cursor-pointer transition-all duration-300',
